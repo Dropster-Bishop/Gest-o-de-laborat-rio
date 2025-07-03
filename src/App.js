@@ -1073,7 +1073,7 @@ const PriceTables = ({ userId, services }) => {
                     <div key={table.id} className="bg-white p-6 rounded-2xl shadow-md flex flex-col">
                         <h3 className="font-bold text-xl text-indigo-700 mb-3">{table.name}</h3>
                         <p className="text-sm text-gray-500 mb-4 flex-grow">{table.services?.length || 0} serviço(s) com preço personalizado.</p>
-                        <div className="flex justify-end gap-2">
+                        <div className="flex flex-wrap justify-end gap-2 mt-2">
                              <Button onClick={() => handleOpenPrintModal(table)} variant="secondary">
                                 <LucidePrinter size={16} /> Imprimir/PDF
                             </Button>
