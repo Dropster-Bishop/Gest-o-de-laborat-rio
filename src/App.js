@@ -1,12 +1,3 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-    getAuth, 
-    onAuthStateChanged,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut
-} from 'firebase/auth';
 import { 
     getFirestore, 
     collection, 
@@ -16,12 +7,13 @@ import {
     updateDoc, 
     deleteDoc,
     query,
-    serverTimestamp
+    serverTimestamp,
+    setDoc,
+    getDoc
 } from 'firebase/firestore';
-import { LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered, LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch, LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock, LucideDollarSign, LucideLogOut } from 'lucide-react';
+import { LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered, LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch, LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock, LucideDollarSign, LucideLogOut, LucideUserCheck } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// This configuration now reads from environment variables, which you must set in your hosting provider (Netlify, Vercel, etc.)
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
@@ -1077,44 +1069,136 @@ const PriceTables = ({ userId, services }) => {
     );
 };
 
+const UserManagement = ({ userId }) => {
+    const [users, setUsers] = useState([]);
+
+    useEffect(() => {
+        if (!userId) return;
+        // This query should be protected by Firestore rules to only allow admins
+        const q = query(collection(db, "users"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setUsers(usersData);
+        });
+        return () => unsubscribe();
+    }, [userId]);
+
+    const handleApproveUser = async (userToApproveId) => {
+        const userDocRef = doc(db, "users", userToApproveId);
+        try {
+            await updateDoc(userDocRef, {
+                status: 'approved'
+            });
+        } catch (error) {
+            console.error("Error approving user: ", error);
+            alert("Ocorreu um erro ao aprovar o utilizador.");
+        }
+    };
+    
+    return (
+        <div className="animate-fade-in">
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Gerir Utilizadores</h1>
+            <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+                <table className="w-full text-sm text-left text-gray-500">
+                    <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                        <tr>
+                            <th scope="col" className="px-6 py-3">Email</th>
+                            <th scope="col" className="px-6 py-3">Status</th>
+                            <th scope="col" className="px-6 py-3">Função</th>
+                            <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {users.map(user => (
+                            <tr key={user.id} className="bg-white border-b hover:bg-gray-50">
+                                <td className="px-6 py-4 font-medium text-gray-900">{user.email}</td>
+                                <td className="px-6 py-4">
+                                    <span className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs ${user.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                        {user.status === 'approved' ? 'Aprovado' : 'Pendente'}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-4">{user.role}</td>
+                                <td className="px-6 py-4 text-center">
+                                    {user.status === 'pending' && (
+                                        <Button onClick={() => handleApproveUser(user.id)} variant="primary">
+                                            Aprovar
+                                        </Button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
 // --- Authentication Screen ---
 const LoginScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleAuth = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError('');
-        try {
-            if (isLogin) {
-                await signInWithEmailAndPassword(auth, email, password);
-            } else {
-                await createUserWithEmailAndPassword(auth, email, password);
+        setMessage('');
+
+        if (isLogin) {
+            try {
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+                const userDocRef = doc(db, "users", user.uid);
+                const userDoc = await getDoc(userDocRef);
+
+                if (!userDoc.exists() || userDoc.data().status !== 'approved') {
+                    await signOut(auth);
+                    setError("A sua conta está pendente de aprovação.");
+                }
+                // If approved, the onAuthStateChanged listener will handle the redirect.
+            } catch (err) {
+                 setError("E-mail ou senha incorretos.");
             }
-        } catch (err) {
-            switch(err.code) {
-                case 'auth/invalid-email':
-                    setError('Formato de e-mail inválido.');
-                    break;
-                case 'auth/user-not-found':
-                case 'auth/wrong-password':
-                    setError('E-mail ou senha incorretos.');
-                    break;
-                case 'auth/email-already-in-use':
-                    setError('Este e-mail já está a ser utilizado.');
-                    break;
-                case 'auth/weak-password':
-                    setError('A senha deve ter pelo menos 6 caracteres.');
-                    break;
-                default:
-                    setError('Ocorreu um erro. Tente novamente.');
+        } else {
+            // Registration
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                // Create a user profile document in Firestore
+                await setDoc(doc(db, "users", user.uid), {
+                    email: user.email,
+                    uid: user.uid,
+                    status: 'pending',
+                    role: 'user', // All new users are 'user' by default
+                    createdAt: serverTimestamp()
+                });
+
+                await signOut(auth);
+                setMessage('Registo concluído! A sua conta está agora pendente de aprovação pelo administrador.');
+
+            } catch (err) {
+                switch(err.code) {
+                    case 'auth/invalid-email':
+                        setError('Formato de e-mail inválido.');
+                        break;
+                    case 'auth/email-already-in-use':
+                        setError('Este e-mail já está a ser utilizado.');
+                        break;
+                    case 'auth/weak-password':
+                        setError('A senha deve ter pelo menos 6 caracteres.');
+                        break;
+                    default:
+                        setError('Ocorreu um erro. Tente novamente.');
+                }
             }
-            setLoading(false);
         }
+        setLoading(false);
     };
 
     return (
@@ -1125,17 +1209,21 @@ const LoginScreen = () => {
                     <h1 className="text-3xl font-bold text-gray-800 mt-2">Gestor Próteses</h1>
                     <p className="text-gray-500">{isLogin ? 'Faça login para continuar' : 'Crie a sua conta'}</p>
                 </div>
-                <form onSubmit={handleAuth} className="space-y-6">
-                    <Input label="Email" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                    <Input label="Senha" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                    {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-                    <Button type="submit" className="w-full" disabled={loading}>
-                        {loading ? 'Aguarde...' : (isLogin ? 'Entrar' : 'Cadastrar')}
-                    </Button>
-                </form>
+                {message ? (
+                    <p className="text-green-600 bg-green-50 p-4 rounded-lg text-center">{message}</p>
+                ) : (
+                    <form onSubmit={handleAuth} className="space-y-6">
+                        <Input label="Email" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+                        <Input label="Senha" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+                        <Button type="submit" className="w-full" disabled={loading}>
+                            {loading ? 'Aguarde...' : (isLogin ? 'Entrar' : 'Cadastrar')}
+                        </Button>
+                    </form>
+                )}
                 <p className="text-center text-sm text-gray-600">
                     {isLogin ? 'Não tem uma conta?' : 'Já tem uma conta?'}
-                    <button onClick={() => {setIsLogin(!isLogin); setError('')}} className="font-medium text-indigo-600 hover:text-indigo-500 ml-1">
+                    <button onClick={() => {setIsLogin(!isLogin); setError(''); setMessage('')}} className="font-medium text-indigo-600 hover:text-indigo-500 ml-1">
                         {isLogin ? 'Cadastre-se' : 'Faça login'}
                     </button>
                 </p>
@@ -1145,7 +1233,7 @@ const LoginScreen = () => {
 };
 
 // --- App Layout (after login) ---
-const AppLayout = ({ user }) => {
+const AppLayout = ({ user, userProfile }) => {
     const [activePage, setActivePage] = useState('dashboard');
     const [clients, setClients] = useState([]);
     const [employees, setEmployees] = useState([]);
@@ -1306,6 +1394,8 @@ const AppLayout = ({ user }) => {
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
             case 'reports':
                 return <Reports orders={serviceOrders} employees={employees} clients={clients}/>;
+            case 'user-management':
+                return <UserManagement userId={user.uid} />;
             default:
                 return <div>Página não encontrada</div>;
         }
@@ -1345,6 +1435,9 @@ const AppLayout = ({ user }) => {
                             <NavItem icon={<LucideHammer />} label="Serviços" page="services" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideDollarSign />} label="Tabelas de Preços" page="price-tables" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideBarChart3 />} label="Relatórios" page="reports" activePage={activePage} setActivePage={setActivePage} />
+                            {userProfile?.role === 'admin' && (
+                                <NavItem icon={<LucideUserCheck />} label="Gerir Utilizadores" page="user-management" activePage={activePage} setActivePage={setActivePage} />
+                            )}
                         </ul>
                     </div>
                 </div>
@@ -1365,11 +1458,29 @@ const AppLayout = ({ user }) => {
 // --- App Entry Point ---
 export default function App() {
     const [user, setUser] = useState(null);
+    const [userProfile, setUserProfile] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            setUser(user);
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                const userDocRef = doc(db, "users", user.uid);
+                const userDoc = await getDoc(userDocRef);
+                if (userDoc.exists() && userDoc.data().status === 'approved') {
+                    setUser(user);
+                    setUserProfile(userDoc.data());
+                } else {
+                    // User is not approved or doc doesn't exist, keep them logged out
+                    setUser(null);
+                    setUserProfile(null);
+                    if (auth.currentUser) {
+                       await signOut(auth);
+                    }
+                }
+            } else {
+                setUser(null);
+                setUserProfile(null);
+            }
             setIsAuthReady(true);
         });
         return () => unsubscribe();
@@ -1379,5 +1490,6 @@ export default function App() {
         return <Spinner />;
     }
 
-    return user ? <AppLayout user={user} /> : <LoginScreen />;
+    return user ? <AppLayout user={user} userProfile={userProfile} /> : <LoginScreen />;
 }
+
