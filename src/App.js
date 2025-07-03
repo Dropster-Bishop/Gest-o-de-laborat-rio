@@ -328,14 +328,25 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         }
     };
     
-    const handlePrint = () => {
+    const generatePdf = (action = 'print') => {
         const input = printRef.current;
-        if (!window.html2canvas || !window.jspdf) {
-            console.error("PDF generation libraries not loaded!");
-            alert("Não foi possível gerar o PDF. Verifique a conexão com a internet e tente novamente.");
+        if (!input || !window.html2canvas || !window.jspdf) {
+            alert('Não foi possível gerar o PDF. Tente novamente.');
             return;
         }
+
+        const commissionEl = input.querySelector('#commission-to-hide');
+        const totalEl = input.querySelector('#total-to-hide');
+
+        // Hide elements before taking the screenshot
+        if (commissionEl) commissionEl.style.visibility = 'hidden';
+        if (totalEl) totalEl.style.visibility = 'hidden';
+
         window.html2canvas(input, { scale: 2 }).then(canvas => {
+            // Show elements again immediately after canvas is created
+            if (commissionEl) commissionEl.style.visibility = 'visible';
+            if (totalEl) totalEl.style.visibility = 'visible';
+
             const imgData = canvas.toDataURL('image/png');
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
@@ -346,32 +357,24 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             const width = pdfWidth - 20;
             const height = width / ratio;
             pdf.addImage(imgData, 'PNG', 10, 10, width, height);
-            pdf.autoPrint();
-            window.open(pdf.output('bloburl'), '_blank');
+
+            if (action === 'print') {
+                pdf.autoPrint();
+                window.open(pdf.output('bloburl'), '_blank');
+            } else {
+                pdf.save(`OS_${currentOrder.number}.pdf`);
+            }
+        }).catch(err => {
+            // Ensure elements are shown even if there's an error
+            if (commissionEl) commissionEl.style.visibility = 'visible';
+            if (totalEl) totalEl.style.visibility = 'visible';
+            console.error("Error generating PDF:", err);
+            alert("Ocorreu um erro ao gerar o PDF.");
         });
     };
 
-    const handleSaveAsPdf = () => {
-        const input = printRef.current;
-        if (!window.html2canvas || !window.jspdf) {
-            console.error("PDF generation libraries not loaded!");
-            alert("Não foi possível gerar o PDF. Verifique a conexão com a internet e tente novamente.");
-            return;
-        }
-        window.html2canvas(input, { scale: 2 }).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const canvasWidth = canvas.width;
-            const canvasHeight = canvas.height;
-            const ratio = canvasWidth / canvasHeight;
-            const width = pdfWidth - 20;
-            const height = width / ratio;
-            pdf.addImage(imgData, 'PNG', 10, 10, width, height);
-            pdf.save(`OS_${currentOrder.number}.pdf`);
-        });
-    };
+    const handlePrint = () => generatePdf('print');
+    const handleSaveAsPdf = () => generatePdf('save');
 
     const filteredOrders = orders.filter(order => {
         if (filter === 'Todos') return true;
@@ -504,8 +507,8 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                 <p className="text-sm italic">{currentOrder.observations || 'Nenhuma observação.'}</p>
                            </div>
                            <div className="text-right">
-                                <p><strong>Comissão ({currentOrder.commissionPercentage}%):</strong> R$ {currentOrder.commissionValue.toFixed(2)}</p>
-                                <p className="text-lg font-bold"><strong>Valor Total:</strong> R$ {currentOrder.totalValue.toFixed(2)}</p>
+                                <p id="commission-to-hide"><strong>Comissão ({currentOrder.commissionPercentage}%):</strong> R$ {currentOrder.commissionValue.toFixed(2)}</p>
+                                <p id="total-to-hide" className="text-lg font-bold"><strong>Valor Total:</strong> R$ {currentOrder.totalValue.toFixed(2)}</p>
                                 <p className="font-bold mt-2"><strong>Status:</strong> {currentOrder.status}</p>
                            </div>
                         </div>
