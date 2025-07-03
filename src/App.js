@@ -478,9 +478,11 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
 
                         <h3 className="font-bold mb-2 border-b">Serviços Solicitados</h3>
                         <table className="w-full text-left mb-6">
-                            <thead>
-                                <tr className="bg-gray-100">
+                            <thead className="bg-gray-100">
+                                <tr>
                                     <th className="p-2">Serviço</th>
+                                    <th className="p-2">Dente</th>
+                                    <th className="p-2">Cor</th>
                                     <th className="p-2 text-right">Valor</th>
                                 </tr>
                             </thead>
@@ -488,6 +490,8 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                 {currentOrder.services.map((service, index) => (
                                     <tr key={index} className="border-b">
                                         <td className="p-2">{service.name}</td>
+                                        <td className="p-2">{service.toothNumber || '-'}</td>
+                                        <td className="p-2">{service.color || '-'}</td>
                                         <td className="p-2 text-right">R$ {service.price.toFixed(2)}</td>
                                     </tr>
                                 ))}
@@ -570,17 +574,25 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     }, [selectedServices, selectedEmployeeId, employees]);
     
     const handleServiceToggle = (service) => {
-        const serviceWithCorrectPrice = {
+        const serviceWithDetails = {
             id: service.id,
             name: service.name,
-            price: service.displayPrice
+            price: service.displayPrice,
+            toothNumber: '',
+            color: ''
         };
 
         setSelectedServices(prev => 
             prev.some(s => s.id === service.id)
                 ? prev.filter(s => s.id !== service.id)
-                : [...prev, serviceWithCorrectPrice]
+                : [...prev, serviceWithDetails]
         );
+    };
+
+    const handleServiceDetailChange = (index, field, value) => {
+        const updatedServices = [...selectedServices];
+        updatedServices[index][field] = value;
+        setSelectedServices(updatedServices);
     };
 
     const handleSubmit = async (e) => {
@@ -633,7 +645,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     };
 
     return (
-        <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="4xl">
+        <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
              <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <div className="space-y-4">
@@ -662,22 +674,38 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                    </div>
                 </div>
 
-                <div>
-                    <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços</h3>
-                     {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-indigo-600 mb-2">A aplicar preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
-                    <div className="max-h-48 overflow-y-auto p-3 bg-gray-50 border rounded-lg grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {availableServices.map(service => (
-                            <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-200 cursor-pointer transition-colors">
-                                <input
-                                    type="checkbox"
-                                    checked={selectedServices.some(s => s.id === service.id)}
-                                    onChange={() => handleServiceToggle(service)}
-                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                />
-                                <span className="flex-1 text-sm text-gray-700">{service.name}</span>
-                                <span className={`text-sm font-semibold ${service.displayPrice !== service.price ? 'text-indigo-600' : 'text-gray-600'}`}>R$ {service.displayPrice?.toFixed(2)}</span>
-                            </label>
-                        ))}
+                <div className="grid grid-cols-2 gap-6">
+                    <div>
+                        <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Disponíveis</h3>
+                        {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-indigo-600 mb-2">A aplicar preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
+                        <div className="max-h-60 overflow-y-auto p-3 bg-gray-50 border rounded-lg">
+                            {availableServices.map(service => (
+                                <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-200 cursor-pointer transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedServices.some(s => s.id === service.id)}
+                                        onChange={() => handleServiceToggle(service)}
+                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span className="flex-1 text-sm text-gray-700">{service.name}</span>
+                                    <span className={`text-sm font-semibold ${service.displayPrice !== service.price ? 'text-indigo-600' : 'text-gray-600'}`}>R$ {service.displayPrice?.toFixed(2)}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                     <div>
+                        <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Selecionados</h3>
+                        <div className="max-h-60 overflow-y-auto p-3 bg-white border rounded-lg space-y-2">
+                             {selectedServices.map((service, index) => (
+                                <div key={service.id} className="grid grid-cols-5 gap-2 items-center">
+                                    <span className="col-span-2 text-sm text-gray-800">{service.name}</span>
+                                    <Input type="text" placeholder="Dente" value={service.toothNumber} onChange={(e) => handleServiceDetailChange(index, 'toothNumber', e.target.value)} />
+                                    <Input type="text" placeholder="Cor" value={service.color} onChange={(e) => handleServiceDetailChange(index, 'color', e.target.value)} />
+                                     <button type="button" onClick={() => handleServiceToggle(service)} className="text-red-500 hover:text-red-700 p-1 justify-self-center"><LucideTrash2 size={16} /></button>
+                                </div>
+                            ))}
+                            {selectedServices.length === 0 && <p className="text-xs text-center text-gray-400 py-4">Nenhum serviço selecionado.</p>}
+                        </div>
                     </div>
                 </div>
                 
@@ -893,7 +921,7 @@ const Reports = ({ orders, employees, clients }) => {
                                             <tr className="bg-white border-b">
                                                 <td colSpan={reportType === 'commissionsByEmployee' ? 6 : 5} className="px-8 py-2">
                                                     <div className="text-xs text-gray-600">
-                                                        <strong className="font-semibold">Serviços:</strong> {order.services && order.services.length > 0 ? order.services.map(s => s.name).join(', ') : 'N/A'}
+                                                        <strong className="font-semibold">Serviços:</strong> {order.services && order.services.length > 0 ? order.services.map(s => `${s.name} (Dente: ${s.toothNumber || 'N/A'}, Cor: ${s.color || 'N/A'})`).join('; ') : 'N/A'}
                                                     </div>
                                                 </td>
                                             </tr>
