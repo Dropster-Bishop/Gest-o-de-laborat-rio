@@ -23,14 +23,20 @@ import {
 import { LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered, LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch, LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock, LucideDollarSign, LucideLogOut, LucideUserCheck } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// This configuration uses the environment's provided credentials.
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID
+};
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const appId = firebaseConfig.appId || 'default-app-id';
 
 // --- Helper Components ---
 
@@ -866,7 +872,7 @@ const Reports = ({ orders, employees, clients }) => {
                                 <tr>
                                     <th scope="col" className="px-6 py-3">Nº O.S.</th>
                                     <th scope="col" className="px-6 py-3">Cliente</th>
-                                    <th scope="col" className="px-6 py-3">Data</th>
+                                    <th scope="col" className="px-6 py-3">Data Abertura/Conclusão</th>
                                     <th scope="col" className="px-6 py-3">Responsável</th>
                                     <th scope="col" className="px-6 py-3 text-right">Valor Total</th>
                                     {reportType === 'commissionsByEmployee' && <th scope="col" className="px-6 py-3 text-right">Comissão</th>}
@@ -874,25 +880,14 @@ const Reports = ({ orders, employees, clients }) => {
                             </thead>
                             <tbody>
                                 {results.map(order => (
-                                    <React.Fragment key={order.id}>
-                                        <tr className="bg-white border-t">
-                                            <td className="px-6 py-4 font-medium">#{order.number}</td>
-                                            <td className="px-6 py-4">{order.clientName}</td>
-                                            <td className="px-6 py-4">{new Date(reportType === 'completedByPeriod' || reportType === 'commissionsByEmployee' ? order.completionDate : order.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                                            <td className="px-6 py-4">{order.employeeName}</td>
-                                            <td className="px-6 py-4 text-right font-bold">R$ {order.totalValue.toFixed(2)}</td>
-                                            {reportType === 'commissionsByEmployee' && <td className="px-6 py-4 text-right">R$ {order.commissionValue.toFixed(2)}</td>}
-                                        </tr>
-                                        {(reportType === 'ordersByClient' || reportType === 'commissionsByEmployee') && (
-                                            <tr className="bg-white border-b">
-                                                <td colSpan={reportType === 'commissionsByEmployee' ? 6 : 5} className="px-8 py-2">
-                                                    <div className="text-xs text-gray-600">
-                                                        <strong className="font-semibold">Serviços:</strong> {order.services && order.services.length > 0 ? order.services.map(s => s.name).join(', ') : 'N/A'}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </React.Fragment>
+                                    <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
+                                        <td className="px-6 py-4 font-medium">#{order.number}</td>
+                                        <td className="px-6 py-4">{order.clientName}</td>
+                                        <td className="px-6 py-4">{new Date(reportType === 'completedByPeriod' || reportType === 'commissionsByEmployee' ? order.completionDate : order.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                        <td className="px-6 py-4">{order.employeeName}</td>
+                                        <td className="px-6 py-4 text-right font-bold">R$ {order.totalValue.toFixed(2)}</td>
+                                        {reportType === 'commissionsByEmployee' && <td className="px-6 py-4 text-right">R$ {order.commissionValue.toFixed(2)}</td>}
+                                    </tr>
                                 ))}
                             </tbody>
                             <tfoot className="font-bold bg-gray-100">
@@ -1506,5 +1501,4 @@ export default function App() {
 
     return user ? <AppLayout user={user} userProfile={userProfile} /> : <LoginScreen />;
 }
-
 
