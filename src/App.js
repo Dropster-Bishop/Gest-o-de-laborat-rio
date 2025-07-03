@@ -921,9 +921,22 @@ const Reports = ({ orders, employees, clients }) => {
 const PriceTables = ({ userId, services }) => {
     const [priceTables, setPriceTables] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [currentTable, setCurrentTable] = useState(null);
     const [tableName, setTableName] = useState('');
     const [tableServices, setTableServices] = useState([]);
+    const printPriceTableRef = useRef();
+
+    // Group services by material for easier management in the modal
+    const servicesByMaterial = services.reduce((acc, service) => {
+        const material = service.material || 'Outros';
+        if (!acc[material]) {
+            acc[material] = [];
+        }
+        acc[material].push(service);
+        return acc;
+    }, {});
+
 
     useEffect(() => {
         if (!userId) return;
@@ -947,9 +960,16 @@ const PriceTables = ({ userId, services }) => {
         }
         setIsModalOpen(true);
     };
+    
+    const handleOpenPrintModal = (table) => {
+        setCurrentTable(table);
+        setIsPrintModalOpen(true);
+    };
 
     const handleCloseModal = () => {
         setIsModalOpen(false);
+        setIsPrintModalOpen(false);
+        setCurrentTable(null);
     };
 
     const handleServiceToggle = (service) => {
@@ -1004,6 +1024,40 @@ const PriceTables = ({ userId, services }) => {
             }
         }
     };
+    
+    const handlePrintPriceTable = () => {
+        const input = printPriceTableRef.current;
+        if (!input || !window.html2canvas || !window.jspdf) {
+            alert('Não foi possível gerar o PDF para impressão. Tente novamente.');
+            return;
+        }
+
+        window.html2canvas(input, { scale: 2 }).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            const ratio = canvasHeight / canvasWidth;
+            let imgHeight = pdfWidth * ratio;
+            let heightLeft = imgHeight;
+            let position = 10;
+            
+            pdf.addImage(imgData, 'PNG', 10, position, pdfWidth - 20, imgHeight);
+            heightLeft -= (pdfHeight - 20);
+
+            while (heightLeft >= 0) {
+              position = heightLeft - imgHeight;
+              pdf.addPage();
+              pdf.addImage(imgData, 'PNG', 10, position, pdfWidth - 20, imgHeight);
+              heightLeft -= pdfHeight;
+            }
+            
+            pdf.save(`Tabela-${currentTable.name.replace(/\s+/g, '-')}.pdf`);
+        });
+    };
 
     return (
         <div className="animate-fade-in">
@@ -1016,10 +1070,13 @@ const PriceTables = ({ userId, services }) => {
             </header>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {priceTables.map(table => (
-                    <div key={table.id} className="bg-white p-6 rounded-2xl shadow-md">
+                    <div key={table.id} className="bg-white p-6 rounded-2xl shadow-md flex flex-col">
                         <h3 className="font-bold text-xl text-indigo-700 mb-3">{table.name}</h3>
-                        <p className="text-sm text-gray-500 mb-4">{table.services?.length || 0} serviço(s) com preço personalizado.</p>
+                        <p className="text-sm text-gray-500 mb-4 flex-grow">{table.services?.length || 0} serviço(s) com preço personalizado.</p>
                         <div className="flex justify-end gap-2">
+                             <Button onClick={() => handleOpenPrintModal(table)} variant="secondary">
+                                <LucidePrinter size={16} /> Imprimir/PDF
+                            </Button>
                             <Button onClick={() => handleOpenModal(table)} variant="secondary">
                                 <LucideEdit size={16} /> Editar
                             </Button>
@@ -1033,7 +1090,7 @@ const PriceTables = ({ userId, services }) => {
             {priceTables.length === 0 && <p className="text-center p-8 text-gray-500 bg-white rounded-2xl shadow-md">Nenhuma tabela de preços criada ainda.</p>}
 
             {isModalOpen && (
-                <Modal onClose={handleCloseModal} title={currentTable ? "Editar Tabela" : "Nova Tabela"} size="3xl">
+                <Modal onClose={handleCloseModal} title={currentTable ? "Editar Tabela" : "Nova Tabela"} size="4xl">
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <Input 
                             label="Nome da Tabela" 
@@ -1044,38 +1101,45 @@ const PriceTables = ({ userId, services }) => {
                             required
                         />
                         <div>
-                            <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Incluídos na Tabela</h3>
-                            <p className="text-sm text-gray-500 mb-3">Selecione os serviços para incluir nesta tabela e defina os seus preços personalizados.</p>
-                            <div className="max-h-80 overflow-y-auto space-y-3 pr-2 border p-4 rounded-lg">
-                                {services.map(service => {
-                                    const isIncluded = tableServices.some(s => s.serviceId === service.id);
-                                    const tableServiceData = isIncluded ? tableServices.find(s => s.serviceId === service.id) : null;
-                                    return (
-                                        <div key={service.id} className="grid grid-cols-12 gap-4 items-center p-2 rounded-md hover:bg-gray-50">
-                                            <div className="col-span-1 flex items-center h-full">
-                                                <input
-                                                    type="checkbox"
-                                                    id={`cb-${service.id}`}
-                                                    className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                                    checked={isIncluded}
-                                                    onChange={() => handleServiceToggle(service)}
-                                                />
-                                            </div>
-                                            <label htmlFor={`cb-${service.id}`} className="col-span-7 text-sm cursor-pointer">{service.name}</label>
-                                            <div className="col-span-4">
-                                                {isIncluded && (
-                                                    <Input
-                                                        type="number"
-                                                        placeholder={`Padrão: ${service.price.toFixed(2)}`}
-                                                        value={tableServiceData.customPrice}
-                                                        onChange={(e) => handlePriceUpdate(service.id, e.target.value)}
-                                                        step="0.01"
-                                                    />
-                                                )}
-                                            </div>
+                            <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços da Tabela</h3>
+                            <p className="text-sm text-gray-500 mb-3">Selecione os serviços para incluir e defina os seus preços personalizados.</p>
+                            <div className="max-h-96 overflow-y-auto space-y-4 pr-2 border p-4 rounded-lg">
+                                {Object.keys(servicesByMaterial).sort().map(material => (
+                                    <div key={material}>
+                                        <h4 className="font-bold text-indigo-600 mb-2 border-b pb-1">{material}</h4>
+                                        <div className="space-y-2">
+                                            {servicesByMaterial[material].map(service => {
+                                                const isIncluded = tableServices.some(s => s.serviceId === service.id);
+                                                const tableServiceData = isIncluded ? tableServices.find(s => s.serviceId === service.id) : null;
+                                                return (
+                                                    <div key={service.id} className="grid grid-cols-12 gap-4 items-center p-2 rounded-md hover:bg-gray-50">
+                                                        <div className="col-span-1 flex items-center h-full">
+                                                            <input
+                                                                type="checkbox"
+                                                                id={`cb-${service.id}`}
+                                                                className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                                checked={isIncluded}
+                                                                onChange={() => handleServiceToggle(service)}
+                                                            />
+                                                        </div>
+                                                        <label htmlFor={`cb-${service.id}`} className="col-span-7 text-sm cursor-pointer">{service.name}</label>
+                                                        <div className="col-span-4">
+                                                            {isIncluded && (
+                                                                <Input
+                                                                    type="number"
+                                                                    placeholder={`Padrão: ${service.price.toFixed(2)}`}
+                                                                    defaultValue={tableServiceData?.customPrice}
+                                                                    onChange={(e) => handlePriceUpdate(service.id, e.target.value)}
+                                                                    step="0.01"
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
-                                    );
-                                })}
+                                    </div>
+                                ))}
                             </div>
                         </div>
                         <div className="flex justify-end gap-3 pt-4">
@@ -1083,6 +1147,37 @@ const PriceTables = ({ userId, services }) => {
                             <Button type="submit" variant="primary">Salvar Tabela</Button>
                         </div>
                     </form>
+                </Modal>
+            )}
+            
+            {isPrintModalOpen && currentTable && (
+                <Modal onClose={handleCloseModal} title={`Tabela de Preços: ${currentTable.name}`} size="3xl">
+                    <div ref={printPriceTableRef} className="p-6 bg-white">
+                        <h1 className="text-2xl font-bold text-center mb-2 text-gray-800">{currentTable.name}</h1>
+                        <p className="text-center text-sm text-gray-500 mb-8">Tabela de Preços de Serviços Odontológicos</p>
+                        {Object.keys(servicesByMaterial)
+                            .filter(material => currentTable.services.some(s => servicesByMaterial[material].some(sm => sm.id === s.serviceId)))
+                            .map(material => (
+                            <div key={material} className="mb-6">
+                                <h2 className="text-lg font-semibold text-indigo-700 border-b-2 border-indigo-200 pb-1 mb-3">{material}</h2>
+                                <table className="w-full text-left">
+                                    <tbody>
+                                        {currentTable.services
+                                            .filter(s => servicesByMaterial[material].some(sm => sm.id === s.serviceId))
+                                            .map(service => (
+                                            <tr key={service.serviceId} className="border-b border-gray-100">
+                                                <td className="py-2 pr-4 text-gray-700">{service.serviceName}</td>
+                                                <td className="py-2 pl-4 text-right font-semibold text-gray-800">R$ {service.customPrice.toFixed(2)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ))}
+                    </div>
+                     <footer className="flex justify-end gap-3 pt-4 border-t mt-4 p-4">
+                        <Button onClick={handlePrintPriceTable} variant="primary"><LucideFileDown size={18} /> Salvar PDF</Button>
+                    </footer>
                 </Modal>
             )}
         </div>
@@ -1377,6 +1472,7 @@ const AppLayout = ({ user, userProfile }) => {
                     title="Serviços (Preços Padrão)"
                     fields={[
                         { name: 'name', label: 'Nome do Serviço', type: 'text', required: true },
+                        { name: 'material', label: 'Material (Ex: Zircônia, E-max)', type: 'text', required: true },
                         { name: 'price', label: 'Valor Padrão (R$)', type: 'number', required: true },
                         { name: 'description', label: 'Descrição', type: 'textarea' },
                     ]}
@@ -1385,7 +1481,7 @@ const AppLayout = ({ user, userProfile }) => {
                              <thead className="text-xs text-gray-700 uppercase bg-gray-100">
                                 <tr>
                                     <th scope="col" className="px-6 py-3">Serviço</th>
-                                    <th scope="col" className="px-6 py-3">Descrição</th>
+                                    <th scope="col" className="px-6 py-3">Material</th>
                                     <th scope="col" className="px-6 py-3 text-right">Preço Padrão</th>
                                     <th scope="col" className="px-6 py-3 text-center">Ações</th>
                                 </tr>
@@ -1394,7 +1490,7 @@ const AppLayout = ({ user, userProfile }) => {
                                 {items.map(item => (
                                     <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
                                         <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
-                                        <td className="px-6 py-4">{item.description}</td>
+                                        <td className="px-6 py-4">{item.material}</td>
                                         <td className="px-6 py-4 text-right font-semibold">R$ {item.price?.toFixed(2)}</td>
                                         <td className="px-6 py-4 text-center">
                                             <div className="flex justify-center items-center gap-2">
