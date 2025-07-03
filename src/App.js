@@ -23,14 +23,20 @@ import {
 import { LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered, LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch, LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock, LucideDollarSign, LucideLogOut, LucideUserCheck } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// This configuration uses the environment's provided credentials.
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID
+};
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const appId = firebaseConfig.appId || 'default-app-id';
 
 // --- Helper Components ---
 
@@ -102,7 +108,7 @@ const Dashboard = ({ setActivePage, serviceOrders }) => {
     
     return (
         <div className="animate-fade-in">
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Painel de Controle</h1>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Painel de Controlo</h1>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                  <StatCard icon={<LucideClock size={40} className="text-yellow-500" />} label="Ordens Pendentes" value={pendingOrders.length} color="border-yellow-500" />
                  <StatCard icon={<LucideHammer size={40} className="text-blue-500" />} label="Em Andamento" value={inProgressOrders.length} color="border-blue-500" />
@@ -1478,18 +1484,22 @@ export default function App() {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                const userDocRef = doc(db, "users", user.uid);
-                const userDoc = await getDoc(userDocRef);
-                if (userDoc.exists() && userDoc.data().status === 'approved') {
-                    setUser(user);
-                    setUserProfile(userDoc.data());
-                } else {
-                    // User is not approved or doc doesn't exist, keep them logged out
+                try {
+                    const userDocRef = doc(db, "users", user.uid);
+                    const userDoc = await getDoc(userDocRef);
+                    if (userDoc.exists() && userDoc.data().status === 'approved') {
+                        setUser(user);
+                        setUserProfile(userDoc.data());
+                    } else {
+                        await signOut(auth);
+                        setUser(null);
+                        setUserProfile(null);
+                    }
+                } catch (error) {
+                    console.error("Erro ao verificar o perfil do utilizador:", error);
+                    await signOut(auth);
                     setUser(null);
                     setUserProfile(null);
-                    if (auth.currentUser) {
-                       await signOut(auth);
-                    }
                 }
             } else {
                 setUser(null);
@@ -1506,4 +1516,3 @@ export default function App() {
 
     return user ? <AppLayout user={user} userProfile={userProfile} /> : <LoginScreen />;
 }
-
