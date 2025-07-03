@@ -1,3 +1,12 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+    getAuth, 
+    onAuthStateChanged,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut
+} from 'firebase/auth';
 import { 
     getFirestore, 
     collection, 
@@ -1158,7 +1167,7 @@ const LoginScreen = () => {
 
                 if (!userDoc.exists() || userDoc.data().status !== 'approved') {
                     await signOut(auth);
-                    setError("A sua conta está pendente de aprovação.");
+                    setError("A sua conta está pendente de aprovação ou não foi encontrada.");
                 }
                 // If approved, the onAuthStateChanged listener will handle the redirect.
             } catch (err) {
