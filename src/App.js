@@ -20,7 +20,7 @@ import {
     setDoc,
     getDoc
 } from 'firebase/firestore';
-import { LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered, LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch, LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock, LucideDollarSign, LucideLogOut, LucideUserCheck } from 'lucide-react';
+import { LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered, LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch, LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock, LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle } from 'lucide-react';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -87,7 +87,7 @@ const Spinner = () => (
 
 // --- Main Application Components ---
 
-const Dashboard = ({ setActivePage, serviceOrders }) => {
+const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
     const upcomingOrders = serviceOrders
         .filter(o => o.status !== 'Concluído' && o.deliveryDate)
         .sort((a, b) => new Date(a.deliveryDate) - new Date(b.deliveryDate))
@@ -95,6 +95,8 @@ const Dashboard = ({ setActivePage, serviceOrders }) => {
 
     const pendingOrders = serviceOrders.filter(o => o.status === 'Pendente');
     const inProgressOrders = serviceOrders.filter(o => o.status === 'Em Andamento');
+    
+    const lowStockItems = inventory.filter(item => item.quantity <= item.lowStockThreshold);
 
     const StatCard = ({ icon, label, value, color }) => (
         <div className={`bg-white p-6 rounded-2xl shadow-md flex items-center gap-4 border-l-4 ${color}`}>
@@ -107,35 +109,55 @@ const Dashboard = ({ setActivePage, serviceOrders }) => {
     );
     
     return (
-        <div className="animate-fade-in">
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Painel de Controle</h1>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="animate-fade-in space-y-8">
+            <h1 className="text-3xl font-bold text-gray-800">Painel de Controle</h1>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                  <StatCard icon={<LucideClock size={40} className="text-yellow-500" />} label="Ordens Pendentes" value={pendingOrders.length} color="border-yellow-500" />
                  <StatCard icon={<LucideHammer size={40} className="text-blue-500" />} label="Em Andamento" value={inProgressOrders.length} color="border-blue-500" />
                  <StatCard icon={<LucideCheckCircle size={40} className="text-green-500" />} label="Ordens Concluídas" value={serviceOrders.filter(o => o.status === 'Concluído').length} color="border-green-500" />
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-md">
-                <h2 className="text-xl font-bold text-gray-700 mb-4">Próximas Entregas</h2>
-                {upcomingOrders.length > 0 ? (
-                    <ul className="space-y-3">
-                        {upcomingOrders.map(order => (
-                            <li key={order.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                                <div>
-                                    <p className="font-semibold text-gray-800">OS #{order.number} - {order.clientName}</p>
-                                    <p className="text-sm text-gray-500">Entrega em: {new Date(order.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
-                                </div>
-                                <span className={`px-3 py-1 text-sm font-medium rounded-full ${
-                                    order.status === 'Pendente' ? 'bg-yellow-100 text-yellow-800' :
-                                    order.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
-                                    'bg-green-100 text-green-800'
-                                }`}>{order.status}</span>
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p className="text-center text-gray-500 py-4">Nenhuma entrega próxima.</p>
-                )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white p-6 rounded-2xl shadow-md">
+                    <h2 className="text-xl font-bold text-gray-700 mb-4">Próximas Entregas</h2>
+                    {upcomingOrders.length > 0 ? (
+                        <ul className="space-y-3">
+                            {upcomingOrders.map(order => (
+                                <li key={order.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                    <div>
+                                        <p className="font-semibold text-gray-800">OS #{order.number} - {order.clientName}</p>
+                                        <p className="text-sm text-gray-500">Entrega em: {new Date(order.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
+                                    </div>
+                                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+                                        order.status === 'Pendente' ? 'bg-yellow-100 text-yellow-800' :
+                                        order.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
+                                        'bg-green-100 text-green-800'
+                                    }`}>{order.status}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-center text-gray-500 py-4">Nenhuma entrega próxima.</p>
+                    )}
+                </div>
+                
+                <div className="bg-white p-6 rounded-2xl shadow-md">
+                    <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
+                        <LucideAlertTriangle className="text-red-500" /> Alertas de Estoque Baixo
+                    </h2>
+                    {lowStockItems.length > 0 ? (
+                        <ul className="space-y-3">
+                            {lowStockItems.map(item => (
+                                <li key={item.id} className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
+                                    <p className="font-semibold text-red-800">{item.itemName}</p>
+                                    <p className="text-sm text-red-600">Restam: {item.quantity} {item.unit}</p>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-center text-gray-500 py-4">Nenhum item com estoque baixo.</p>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -1386,6 +1408,7 @@ const AppLayout = ({ user, userProfile }) => {
     const [services, setServices] = useState([]);
     const [serviceOrders, setServiceOrders] = useState([]);
     const [priceTables, setPriceTables] = useState([]);
+    const [inventory, setInventory] = useState([]);
     
     useEffect(() => {
         if (!user) return;
@@ -1395,7 +1418,8 @@ const AppLayout = ({ user, userProfile }) => {
             employees: setEmployees,
             services: setServices,
             serviceOrders: setServiceOrders,
-            priceTables: setPriceTables
+            priceTables: setPriceTables,
+            inventory: setInventory
         };
 
         const unsubscribers = Object.entries(collections).map(([name, setter]) => {
@@ -1425,7 +1449,7 @@ const AppLayout = ({ user, userProfile }) => {
     const renderPage = () => {
         switch (activePage) {
             case 'dashboard':
-                return <Dashboard setActivePage={setActivePage} serviceOrders={serviceOrders}/>;
+                return <Dashboard setActivePage={setActivePage} serviceOrders={serviceOrders} inventory={inventory} />;
             case 'clients':
                 return <ManageGeneric
                     collectionName="clients"
@@ -1535,6 +1559,50 @@ const AppLayout = ({ user, userProfile }) => {
                         </table>
                     )}
                 />;
+            case 'inventory':
+                return <ManageGeneric
+                    collectionName="inventory"
+                    title="Controlo de Estoque"
+                    fields={[
+                        { name: 'itemName', label: 'Nome do Item', type: 'text', required: true },
+                        { name: 'supplier', label: 'Fornecedor (Opcional)', type: 'text' },
+                        { name: 'quantity', label: 'Quantidade Atual', type: 'number', required: true },
+                        { name: 'unit', label: 'Unidade (un, g, ml, etc.)', type: 'text', required: true },
+                        { name: 'lowStockThreshold', label: 'Alerta de Estoque Baixo', type: 'number', required: true }
+                    ]}
+                    renderItem={(items, onEdit, onDelete) => (
+                        <table className="w-full text-sm text-left text-gray-500">
+                            <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3">Item</th>
+                                    <th scope="col" className="px-6 py-3">Fornecedor</th>
+                                    <th scope="col" className="px-6 py-3">Quantidade</th>
+                                    <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {items.map(item => (
+                                    <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
+                                        <td className="px-6 py-4 font-medium text-gray-900 flex items-center gap-2">
+                                            {item.itemName}
+                                            {item.quantity <= item.lowStockThreshold && 
+                                                <LucideAlertTriangle size={16} className="text-red-500" title="Estoque baixo!" />
+                                            }
+                                        </td>
+                                        <td className="px-6 py-4">{item.supplier}</td>
+                                        <td className="px-6 py-4">{item.quantity} {item.unit}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="flex justify-center items-center gap-2">
+                                                <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
+                                                <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                />;
             case 'price-tables':
                 return <PriceTables userId={user.uid} services={services} />;
             case 'service-orders':
@@ -1581,6 +1649,7 @@ const AppLayout = ({ user, userProfile }) => {
                             <NavItem icon={<LucideUsers />} label="Funcionários" page="employees" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideHammer />} label="Serviços" page="services" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideDollarSign />} label="Tabelas de Preços" page="price-tables" activePage={activePage} setActivePage={setActivePage} />
+                            <NavItem icon={<LucideBoxes />} label="Estoque" page="inventory" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideBarChart3 />} label="Relatórios" page="reports" activePage={activePage} setActivePage={setActivePage} />
                             {userProfile?.role === 'admin' && (
                                 <NavItem icon={<LucideUserCheck />} label="Gerir Utilizadores" page="user-management" activePage={activePage} setActivePage={setActivePage} />
