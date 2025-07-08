@@ -110,7 +110,7 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
     
     return (
         <div className="animate-fade-in space-y-8">
-            <h1 className="text-3xl font-bold text-gray-800">Painel de Controle</h1>
+            <h1 className="text-3xl font-bold text-gray-800">Painel de Controlo</h1>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                  <StatCard icon={<LucideClock size={40} className="text-yellow-500" />} label="Ordens Pendentes" value={pendingOrders.length} color="border-yellow-500" />
                  <StatCard icon={<LucideHammer size={40} className="text-blue-500" />} label="Em Andamento" value={inProgressOrders.length} color="border-blue-500" />
@@ -433,11 +433,10 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                             <tr>
                                 <th scope="col" className="px-6 py-3">Nº O.S.</th>
                                 <th scope="col" className="px-6 py-3">Cliente</th>
+                                <th scope="col" className="px-6 py-3">Paciente</th>
                                 <th scope="col" className="px-6 py-3">Responsável</th>
-                                <th scope="col" className="px-6 py-3">Data Abertura</th>
                                 <th scope="col" className="px-6 py-3">Data Entrega</th>
                                 <th scope="col" className="px-6 py-3">Status</th>
-                                <th scope="col" className="px-6 py-3">Total</th>
                                 <th scope="col" className="px-6 py-3 text-center">Ações</th>
                             </tr>
                         </thead>
@@ -446,8 +445,8 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                 <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
                                     <td className="px-6 py-4 font-medium text-gray-900">#{order.number}</td>
                                     <td className="px-6 py-4">{order.clientName}</td>
+                                    <td className="px-6 py-4">{order.patientName}</td>
                                     <td className="px-6 py-4">{order.employeeName}</td>
-                                    <td className="px-6 py-4">{order.openDate ? new Date(order.openDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A'}</td>
                                     <td className="px-6 py-4">{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A'}</td>
                                     <td className="px-6 py-4">
                                         <span className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs ${
@@ -458,7 +457,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                             {order.status}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 font-bold text-gray-800">R$ {order.totalValue?.toFixed(2)}</td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex justify-center items-center gap-2">
                                             <button onClick={() => handleOpenViewModal(order)} className="text-indigo-600 hover:text-indigo-900 p-1"><LucideSearch size={18} /></button>
@@ -487,7 +485,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                             <div>
                                 <h3 className="font-bold mb-2 border-b">Cliente</h3>
                                 <p><strong>Nome:</strong> {currentOrder.client.name}</p>
-                                <p><strong>CPF/CNPJ:</strong> {currentOrder.client.document}</p>
+                                <p><strong>Paciente:</strong> {currentOrder.patientName}</p>
                                 <p><strong>Telefone:</strong> {currentOrder.client.phone}</p>
                                 <p><strong>Endereço:</strong> {currentOrder.client.address}</p>
                             </div>
@@ -638,6 +636,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             clientId: client.id,
             clientName: client.name,
             client: client,
+            patientName: formRef.current.patientName.value,
             employeeId: employee.id,
             employeeName: employee.name,
             employee: employee,
@@ -675,7 +674,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <div className="space-y-4">
                        <div>
-                           <label htmlFor="clientId" className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+                           <label htmlFor="clientId" className="block text-sm font-medium text-gray-700 mb-1">Cliente (Dentista/Clínica)</label>
                            <select id="clientId" value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" required>
                                <option value="">Selecione um cliente</option>
                                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -694,8 +693,11 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                        </div>
                    </div>
                    <div className="space-y-4">
-                      <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate} required/>
-                      <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required/>
+                      <Input label="Nome do Paciente" id="patientName" type="text" ref={el => formRef.current.patientName = el} defaultValue={order?.patientName} required/>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate} required/>
+                        <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required/>
+                      </div>
                    </div>
                 </div>
 
@@ -1712,3 +1714,4 @@ export default function App() {
 
     return user ? <AppLayout user={user} userProfile={userProfile} /> : <LoginScreen />;
 }
+
