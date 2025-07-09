@@ -110,7 +110,7 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
     
     return (
         <div className="animate-fade-in space-y-8">
-            <h1 className="text-3xl font-bold text-gray-800">Painel de Controle</h1>
+            <h1 className="text-3xl font-bold text-gray-800">Painel de Controlo</h1>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                  <StatCard icon={<LucideClock size={40} className="text-yellow-500" />} label="Ordens Pendentes" value={pendingOrders.length} color="border-yellow-500" />
                  <StatCard icon={<LucideHammer size={40} className="text-blue-500" />} label="Em Andamento" value={inProgressOrders.length} color="border-blue-500" />
@@ -398,6 +398,31 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
     const handlePrint = () => generatePdf('print');
     const handleSaveAsPdf = () => generatePdf('save');
 
+    const handleStatusChange = async (orderId, newStatus) => {
+        if (!userId) return;
+        const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
+        try {
+            const updateData = { status: newStatus };
+            if (newStatus === 'Concluído') {
+                updateData.completionDate = new Date().toISOString().split('T')[0];
+            }
+            await updateDoc(docRef, updateData);
+        } catch (error) {
+            console.error("Error updating status: ", error);
+            alert("Ocorreu um erro ao atualizar o status.");
+        }
+    };
+
+    const getStatusClasses = (status) => {
+        switch (status) {
+            case 'Concluído': return 'bg-green-100 text-green-800';
+            case 'Pendente': return 'bg-yellow-100 text-yellow-800';
+            case 'Em Andamento': return 'bg-blue-100 text-blue-800';
+            case 'Cancelado': return 'bg-red-100 text-red-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
+
     const filteredOrders = orders.filter(order => {
         if (filter === 'Todos') return true;
         return order.status === filter;
@@ -449,13 +474,17 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                     <td className="px-6 py-4">{order.employeeName}</td>
                                     <td className="px-6 py-4">{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A'}</td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs ${
-                                            order.status === 'Concluído' ? 'bg-green-100 text-green-800' :
-                                            order.status === 'Pendente' ? 'bg-yellow-100 text-yellow-800' :
-                                            order.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
-                                        }`}>
-                                            {order.status}
-                                        </span>
+                                        <select
+                                            value={order.status}
+                                            onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                                            className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs border-none appearance-none focus:ring-0 cursor-pointer ${getStatusClasses(order.status)}`}
+                                            style={{ WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}
+                                        >
+                                            <option value="Pendente">Pendente</option>
+                                            <option value="Em Andamento">Em Andamento</option>
+                                            <option value="Concluído">Concluído</option>
+                                            <option value="Cancelado">Cancelado</option>
+                                        </select>
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex justify-center items-center gap-2">
@@ -1714,4 +1743,5 @@ export default function App() {
 
     return user ? <AppLayout user={user} userProfile={userProfile} /> : <LoginScreen />;
 }
+
 
