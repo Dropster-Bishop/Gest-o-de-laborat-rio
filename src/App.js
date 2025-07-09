@@ -110,7 +110,7 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
     
     return (
         <div className="animate-fade-in space-y-8">
-            <h1 className="text-3xl font-bold text-gray-800">Painel de Controlo</h1>
+            <h1 className="text-3xl font-bold text-gray-800">Painel de Controle</h1>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                  <StatCard icon={<LucideClock size={40} className="text-yellow-500" />} label="Ordens Pendentes" value={pendingOrders.length} color="border-yellow-500" />
                  <StatCard icon={<LucideHammer size={40} className="text-blue-500" />} label="Em Andamento" value={inProgressOrders.length} color="border-blue-500" />
