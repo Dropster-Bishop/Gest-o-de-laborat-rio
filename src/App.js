@@ -87,16 +87,21 @@ const Spinner = () => (
 
 // --- Main Application Components ---
 
-const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
+const Dashboard = ({ setActivePage, serviceOrders, inventory, payables }) => {
     const upcomingOrders = serviceOrders
         .filter(o => o.status !== 'Concluído' && o.deliveryDate)
         .sort((a, b) => new Date(a.deliveryDate) - new Date(b.deliveryDate))
         .slice(0, 5);
-
-    const pendingOrders = serviceOrders.filter(o => o.status === 'Pendente');
-    const inProgressOrders = serviceOrders.filter(o => o.status === 'Em Andamento');
     
     const lowStockItems = inventory.filter(item => item.quantity <= item.lowStockThreshold);
+    
+    const totalToReceive = serviceOrders
+        .filter(o => o.status === 'Concluído' && o.paymentStatus !== 'pago')
+        .reduce((sum, o) => sum + o.totalValue, 0);
+
+    const totalToPay = payables
+        .filter(p => p.status !== 'pago')
+        .reduce((sum, p) => sum + p.amount, 0);
 
     const StatCard = ({ icon, label, value, color }) => (
         <div className={`bg-white p-6 rounded-2xl shadow-md flex items-center gap-4 border-l-4 ${color}`}>
@@ -111,10 +116,11 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
     return (
         <div className="animate-fade-in space-y-8">
             <h1 className="text-3xl font-bold text-gray-800">Painel de Controle</h1>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                 <StatCard icon={<LucideClock size={40} className="text-yellow-500" />} label="Ordens Pendentes" value={pendingOrders.length} color="border-yellow-500" />
-                 <StatCard icon={<LucideHammer size={40} className="text-blue-500" />} label="Em Andamento" value={inProgressOrders.length} color="border-blue-500" />
-                 <StatCard icon={<LucideCheckCircle size={40} className="text-green-500" />} label="Ordens Concluídas" value={serviceOrders.filter(o => o.status === 'Concluído').length} color="border-green-500" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                 <StatCard icon={<LucideListOrdered size={40} className="text-blue-500" />} label="Ordens Ativas" value={serviceOrders.filter(o => o.status === 'Pendente' || o.status === 'Em Andamento').length} color="border-blue-500" />
+                 <StatCard icon={<LucideTrendingUp size={40} className="text-green-500" />} label="A Receber" value={`R$ ${totalToReceive.toFixed(2)}`} color="border-green-500" />
+                 <StatCard icon={<LucideTrendingDown size={40} className="text-red-500" />} label="A Pagar" value={`R$ ${totalToPay.toFixed(2)}`} color="border-red-500" />
+                 <StatCard icon={<LucideBoxes size={40} className="text-yellow-500" />} label="Itens em Estoque Baixo" value={lowStockItems.length} color="border-yellow-500" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1650,6 +1656,8 @@ const AppLayout = ({ user, userProfile }) => {
                 return <Reports orders={serviceOrders} employees={employees} clients={clients}/>;
             case 'user-management':
                 return <UserManagement userId={user.uid} />;
+            case 'financeiro':
+                return <Finance userId={user.uid} serviceOrders={serviceOrders} payables={payables} />;
             default:
                 return <div>Página não encontrada</div>;
         }
