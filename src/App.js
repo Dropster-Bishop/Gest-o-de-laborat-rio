@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-// --- Dependências (assumindo que você as tenha no seu projeto) ---
+// --- Dependências ---
 import { initializeApp } from 'firebase/app';
 import {
     getAuth,
@@ -32,7 +32,6 @@ import {
 } from 'lucide-react';
 
 // --- Configuração do Firebase ---
-// Lembre-se de criar um arquivo .env na raiz do seu projeto com suas chaves
 const firebaseConfig = {
     apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
     authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
@@ -597,8 +596,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
 
 
     const generatePdf = (action = 'print') => {
-        // Esta função depende das bibliotecas html2canvas e jspdf carregadas globalmente
-        // Ex: <script src=".../html2canvas.min.js"></script> <script src=".../jspdf.umd.min.js"></script> no seu index.html
         const input = printRef.current;
         if (!input || !window.html2canvas || !window.jspdf) {
             alert('Não foi possível gerar o PDF. Bibliotecas necessárias não encontradas.');
@@ -918,7 +915,6 @@ const Reports = ({ orders, employees, clients }) => {
             <div className="bg-white p-6 rounded-2xl shadow-md">
                 <div className="flex justify-between items-center mb-4">
                      <h2 className="text-xl font-bold text-gray-700">Resultados</h2>
-                     {/* Botão de impressão pode ser adicionado aqui */}
                 </div>
                 <div ref={reportPrintRef}>
                     {results.length > 0 ? (
@@ -962,14 +958,237 @@ const Reports = ({ orders, employees, clients }) => {
     );
 };
 
-const PriceTables = ({ userId, services }) => {
-    // ... (O código deste componente permanece o mesmo da resposta anterior)
-    return <div className="animate-fade-in">Página de Tabelas de Preços (código omitido por brevidade, mas deve ser inserido aqui).</div>;
+// --- COMPONENTE PriceTables RESTAURADO ---
+const PriceTableForm = ({ table, services, onSubmit, onCancel }) => {
+    const [name, setName] = useState(table?.name || '');
+    const [tableServices, setTableServices] = useState(table?.services || []);
+
+    const handleServicePriceChange = (serviceId, serviceName, customPrice) => {
+        const price = parseFloat(customPrice);
+        const existingService = tableServices.find(s => s.serviceId === serviceId);
+
+        if (isNaN(price) || price <= 0) {
+             // Remove service if price is invalid or empty
+            setTableServices(prev => prev.filter(s => s.serviceId !== serviceId));
+        } else if (existingService) {
+            // Update existing service price
+            setTableServices(prev => prev.map(s => s.serviceId === serviceId ? { ...s, customPrice: price } : s));
+        } else {
+            // Add new service
+            setTableServices(prev => [...prev, { serviceId, serviceName, customPrice: price }]);
+        }
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!name) {
+            alert('O nome da tabela é obrigatório.');
+            return;
+        }
+        onSubmit({ name, services: tableServices });
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-6">
+            <Input label="Nome da Tabela" value={name} onChange={e => setName(e.target.value)} required />
+            <div>
+                <h3 className="text-lg font-medium text-gray-800 mb-2">Preços dos Serviços</h3>
+                <p className="text-sm text-gray-500 mb-3">Preencha apenas os serviços que terão um preço diferente do padrão. Deixe em branco para usar o preço padrão.</p>
+                <div className="max-h-80 overflow-y-auto space-y-2 p-3 bg-gray-50 border rounded-lg">
+                    {services.map(service => {
+                        const tableService = tableServices.find(s => s.serviceId === service.id);
+                        return (
+                             <div key={service.id} className="grid grid-cols-3 gap-4 items-center">
+                                <label htmlFor={service.id} className="text-sm text-gray-700 col-span-2">{service.name} (Padrão: R$ {service.price.toFixed(2)})</label>
+                                <Input 
+                                    id={service.id}
+                                    type="number"
+                                    placeholder="Preço Customizado"
+                                    step="0.01"
+                                    defaultValue={tableService?.customPrice || ''}
+                                    onChange={e => handleServicePriceChange(service.id, service.name, e.target.value)}
+                                />
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+             <div className="flex justify-end gap-3 pt-4">
+                <Button type="button" onClick={onCancel} variant="secondary">Cancelar</Button>
+                <Button type="submit" variant="primary">Salvar Tabela</Button>
+            </div>
+        </form>
+    );
 };
 
+const PriceTables = ({ userId, services }) => {
+    const [tables, setTables] = useState([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [currentTable, setCurrentTable] = useState(null);
+    const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/priceTables`);
+
+    useEffect(() => {
+        if (!userId) return;
+        const unsubscribe = onSnapshot(collectionRef, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setTables(data);
+        });
+        return () => unsubscribe();
+    }, [userId]);
+
+    const handleOpenModal = (table = null) => {
+        setCurrentTable(table);
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setCurrentTable(null);
+        setIsModalOpen(false);
+    };
+
+    const handleSaveTable = async (tableData) => {
+        try {
+            if (currentTable) {
+                const docRef = doc(db, collectionRef.path, currentTable.id);
+                await updateDoc(docRef, tableData);
+            } else {
+                await addDoc(collectionRef, tableData);
+            }
+            handleCloseModal();
+        } catch (error) {
+            console.error("Erro ao salvar tabela de preços: ", error);
+        }
+    };
+    
+    const handleDeleteTable = async (id) => {
+        if(window.confirm('Tem certeza que deseja excluir esta tabela de preços?')) {
+            try {
+                await deleteDoc(doc(db, collectionRef.path, id));
+            } catch (error) {
+                 console.error("Erro ao excluir tabela de preços: ", error);
+            }
+        }
+    };
+
+    return (
+        <div className="animate-fade-in">
+             <header className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold text-gray-800">Tabelas de Preços</h1>
+                <Button onClick={() => handleOpenModal()}>
+                    <LucidePlusCircle size={20} />
+                    Nova Tabela
+                </Button>
+            </header>
+            <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+                <table className="w-full text-sm text-left text-gray-500">
+                    <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                        <tr>
+                            <th scope="col" className="px-6 py-3">Nome da Tabela</th>
+                            <th scope="col" className="px-6 py-3">Serviços com Preço Customizado</th>
+                            <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {tables.map(table => (
+                            <tr key={table.id} className="bg-white border-b hover:bg-gray-50">
+                                <td className="px-6 py-4 font-medium text-gray-900">{table.name}</td>
+                                <td className="px-6 py-4">{table.services?.length || 0}</td>
+                                <td className="px-6 py-4 text-center">
+                                    <div className="flex justify-center items-center gap-2">
+                                        <button onClick={() => handleOpenModal(table)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
+                                        <button onClick={() => handleDeleteTable(table.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                         {tables.length === 0 && (
+                            <tr>
+                                <td colSpan="3" className="text-center p-8 text-gray-500">Nenhuma tabela de preços encontrada.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {isModalOpen && (
+                <Modal onClose={handleCloseModal} title={currentTable ? "Editar Tabela" : "Nova Tabela de Preços"} size="3xl">
+                    <PriceTableForm table={currentTable} services={services} onSubmit={handleSaveTable} onCancel={handleCloseModal} />
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+// --- COMPONENTE UserManagement RESTAURADO ---
 const UserManagement = ({ userId }) => {
-    // ... (O código deste componente permanece o mesmo da resposta anterior)
-     return <div className="animate-fade-in">Página de Gestão de Utilizadores (código omitido por brevidade, mas deve ser inserido aqui).</div>;
+    const [users, setUsers] = useState([]);
+    const usersCollectionRef = collection(db, "users");
+
+    useEffect(() => {
+        // Apenas um admin pode buscar todos os usuários
+        // A segurança real deve ser feita nas Regras do Firestore
+        const unsubscribe = onSnapshot(usersCollectionRef, (snapshot) => {
+            const userList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setUsers(userList);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const handleStatusChange = async (targetUserId, newStatus) => {
+        const userDocRef = doc(db, "users", targetUserId);
+        try {
+            await updateDoc(userDocRef, { status: newStatus });
+            alert(`Status do usuário atualizado para ${newStatus}`);
+        } catch (error) {
+            console.error("Erro ao atualizar status do usuário: ", error);
+            alert("Falha ao atualizar o status.");
+        }
+    };
+    
+    return (
+        <div className="animate-fade-in">
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Gestão de Utilizadores</h1>
+             <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+                <table className="w-full text-sm text-left text-gray-500">
+                    <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                        <tr>
+                            <th scope="col" className="px-6 py-3">Email</th>
+                            <th scope="col" className="px-6 py-3">Data de Registo</th>
+                            <th scope="col" className="px-6 py-3">Status</th>
+                            <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {users.map(user => (
+                            <tr key={user.id} className="bg-white border-b hover:bg-gray-50">
+                                <td className="px-6 py-4 font-medium text-gray-900">{user.email}</td>
+                                <td className="px-6 py-4">{user.createdAt?.toDate().toLocaleDateString('pt-BR') || 'N/A'}</td>
+                                <td className="px-6 py-4">
+                                     <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+                                        user.status === 'approved' ? 'bg-green-100 text-green-800' :
+                                        user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                        'bg-red-100 text-red-800'
+                                    }`}>{user.status === 'approved' ? 'Aprovado' : 'Pendente'}</span>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                    {user.status === 'pending' && (
+                                        <Button onClick={() => handleStatusChange(user.id, 'approved')}>
+                                            Aprovar
+                                        </Button>
+                                    )}
+                                     {user.status === 'approved' && user.role !== 'admin' && (
+                                        <Button onClick={() => handleStatusChange(user.id, 'pending')} variant="secondary">
+                                            Revogar Acesso
+                                        </Button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
 };
 
 // --- Formulário de Pagamento (Componente Auxiliar para Financeiro) ---
@@ -1554,7 +1773,7 @@ const AppLayout = ({ user, userProfile }) => {
                 return <PriceTables userId={user.uid} services={services} />;
             case 'service-orders':
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
-            case 'financials': // MODIFICADO AQUI
+            case 'financials':
                 return <Financials userId={user.uid} orders={serviceOrders} />;
             case 'reports':
                 return <Reports orders={serviceOrders} employees={employees} clients={clients} />;
