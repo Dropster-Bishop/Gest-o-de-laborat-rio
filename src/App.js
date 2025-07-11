@@ -20,7 +20,7 @@ import {
     setDoc,
     getDoc
 } from 'firebase/firestore';
-import { LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered, LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch, LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock, LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle } from 'lucide-react';
+import { LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered, LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch, LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock, LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle, LucideTrendingUp, LucideTrendingDown } from 'lucide-react';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -87,16 +87,21 @@ const Spinner = () => (
 
 // --- Main Application Components ---
 
-const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
+const Dashboard = ({ setActivePage, serviceOrders, inventory, payables }) => {
     const upcomingOrders = serviceOrders
         .filter(o => o.status !== 'Concluído' && o.deliveryDate)
         .sort((a, b) => new Date(a.deliveryDate) - new Date(b.deliveryDate))
         .slice(0, 5);
-
-    const pendingOrders = serviceOrders.filter(o => o.status === 'Pendente');
-    const inProgressOrders = serviceOrders.filter(o => o.status === 'Em Andamento');
     
     const lowStockItems = inventory.filter(item => item.quantity <= item.lowStockThreshold);
+    
+    const totalToReceive = serviceOrders
+        .filter(o => o.status === 'Concluído' && o.paymentStatus !== 'pago')
+        .reduce((sum, o) => sum + o.totalValue, 0);
+
+    const totalToPay = payables
+        .filter(p => p.status !== 'pago')
+        .reduce((sum, p) => sum + p.amount, 0);
 
     const StatCard = ({ icon, label, value, color }) => (
         <div className={`bg-white p-6 rounded-2xl shadow-md flex items-center gap-4 border-l-4 ${color}`}>
@@ -110,11 +115,12 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
     
     return (
         <div className="animate-fade-in space-y-8">
-            <h1 className="text-3xl font-bold text-gray-800">Painel de Controle</h1>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                 <StatCard icon={<LucideClock size={40} className="text-yellow-500" />} label="Ordens Pendentes" value={pendingOrders.length} color="border-yellow-500" />
-                 <StatCard icon={<LucideHammer size={40} className="text-blue-500" />} label="Em Andamento" value={inProgressOrders.length} color="border-blue-500" />
-                 <StatCard icon={<LucideCheckCircle size={40} className="text-green-500" />} label="Ordens Concluídas" value={serviceOrders.filter(o => o.status === 'Concluído').length} color="border-green-500" />
+            <h1 className="text-3xl font-bold text-gray-800">Painel de Controlo</h1>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                 <StatCard icon={<LucideListOrdered size={40} className="text-blue-500" />} label="Ordens Ativas" value={serviceOrders.filter(o => o.status === 'Pendente' || o.status === 'Em Andamento').length} color="border-blue-500" />
+                 <StatCard icon={<LucideTrendingUp size={40} className="text-green-500" />} label="A Receber" value={`R$ ${totalToReceive.toFixed(2)}`} color="border-green-500" />
+                 <StatCard icon={<LucideTrendingDown size={40} className="text-red-500" />} label="A Pagar" value={`R$ ${totalToPay.toFixed(2)}`} color="border-red-500" />
+                 <StatCard icon={<LucideBoxes size={40} className="text-yellow-500" />} label="Itens em Estoque Baixo" value={lowStockItems.length} color="border-yellow-500" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -213,6 +219,9 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                 const docRef = doc(db, collectionRef.path, currentItem.id);
                 await updateDoc(docRef, formData);
             } else {
+                if (collectionName === 'payables') {
+                    formData.status = 'pendente';
+                }
                 await addDoc(collectionRef, formData);
             }
             handleCloseModal();
@@ -282,7 +291,9 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                                             className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                                         >
                                             <option value="">{field.placeholder}</option>
-                                            {customProps[field.optionsKey]?.map(option => (
+                                            {field.options?.map(option => (
+                                                <option key={option.value} value={option.value}>{option.label}</option>
+                                            )) || customProps[field.optionsKey]?.map(option => (
                                                 <option key={option.id} value={option.id}>{option.name}</option>
                                             ))}
                                         </select>
@@ -673,6 +684,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             deliveryDate: formRef.current.deliveryDate.value,
             completionDate: formRef.current.completionDate.value || null,
             status: formRef.current.status.value,
+            paymentStatus: order?.paymentStatus || 'pendente',
             services: selectedServices,
             totalValue,
             commissionPercentage: employee.commission,
@@ -1440,6 +1452,7 @@ const AppLayout = ({ user, userProfile }) => {
     const [serviceOrders, setServiceOrders] = useState([]);
     const [priceTables, setPriceTables] = useState([]);
     const [inventory, setInventory] = useState([]);
+    const [payables, setPayables] = useState([]);
     
     useEffect(() => {
         if (!user) return;
@@ -1450,7 +1463,8 @@ const AppLayout = ({ user, userProfile }) => {
             services: setServices,
             serviceOrders: setServiceOrders,
             priceTables: setPriceTables,
-            inventory: setInventory
+            inventory: setInventory,
+            payables: setPayables,
         };
 
         const unsubscribers = Object.entries(collections).map(([name, setter]) => {
@@ -1480,7 +1494,7 @@ const AppLayout = ({ user, userProfile }) => {
     const renderPage = () => {
         switch (activePage) {
             case 'dashboard':
-                return <Dashboard setActivePage={setActivePage} serviceOrders={serviceOrders} inventory={inventory} />;
+                return <Dashboard setActivePage={setActivePage} serviceOrders={serviceOrders} inventory={inventory} payables={payables} />;
             case 'clients':
                 return <ManageGeneric
                     collectionName="clients"
@@ -1681,6 +1695,7 @@ const AppLayout = ({ user, userProfile }) => {
                             <NavItem icon={<LucideHammer />} label="Serviços" page="services" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideDollarSign />} label="Tabelas de Preços" page="price-tables" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideBoxes />} label="Estoque" page="inventory" activePage={activePage} setActivePage={setActivePage} />
+                            <NavItem icon={<LucideTrendingUp />} label="Financeiro" page="financeiro" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideBarChart3 />} label="Relatórios" page="reports" activePage={activePage} setActivePage={setActivePage} />
                             {userProfile?.role === 'admin' && (
                                 <NavItem icon={<LucideUserCheck />} label="Gerir Utilizadores" page="user-management" activePage={activePage} setActivePage={setActivePage} />
@@ -1743,5 +1758,3 @@ export default function App() {
 
     return user ? <AppLayout user={user} userProfile={userProfile} /> : <LoginScreen />;
 }
-
-
