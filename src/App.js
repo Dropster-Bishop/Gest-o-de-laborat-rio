@@ -20,7 +20,7 @@ import {
     setDoc,
     getDoc
 } from 'firebase/firestore';
-import { LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered, LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch, LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock, LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle, LucideTrendingUp, LucideTrendingDown } from 'lucide-react';
+import { LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered, LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch, LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock, LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle } from 'lucide-react';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -80,7 +80,7 @@ const Spinner = () => (
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <p className="mt-4 text-gray-500">Carregando...</p>
+            <p className="mt-4 text-gray-500">A carregar...</p>
         </div>
     </div>
 );
@@ -213,9 +213,6 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                 const docRef = doc(db, collectionRef.path, currentItem.id);
                 await updateDoc(docRef, formData);
             } else {
-                if (collectionName === 'payables') {
-                    formData.status = 'pendente';
-                }
                 await addDoc(collectionRef, formData);
             }
             handleCloseModal();
@@ -285,9 +282,7 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                                             className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                                         >
                                             <option value="">{field.placeholder}</option>
-                                            {field.options?.map(option => (
-                                                <option key={option.value} value={option.value}>{option.label}</option>
-                                            )) || customProps[field.optionsKey]?.map(option => (
+                                            {customProps[field.optionsKey]?.map(option => (
                                                 <option key={option.id} value={option.id}>{option.name}</option>
                                             ))}
                                         </select>
@@ -678,7 +673,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             deliveryDate: formRef.current.deliveryDate.value,
             completionDate: formRef.current.completionDate.value || null,
             status: formRef.current.status.value,
-            paymentStatus: order?.paymentStatus || 'pendente',
             services: selectedServices,
             totalValue,
             commissionPercentage: employee.commission,
@@ -739,7 +733,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 <div className="grid grid-cols-2 gap-6">
                     <div>
                         <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Disponíveis</h3>
-                        {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-indigo-600 mb-2">Aplicando preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
+                        {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-indigo-600 mb-2">A aplicar preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
                         <div className="max-h-60 overflow-y-auto p-3 bg-gray-50 border rounded-lg">
                             {availableServices.map(service => (
                                 <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-200 cursor-pointer transition-colors">
@@ -1296,13 +1290,13 @@ const UserManagement = ({ userId }) => {
             });
         } catch (error) {
             console.error("Error approving user: ", error);
-            alert("Ocorreu um erro ao aprovar o usuário.");
+            alert("Ocorreu um erro ao aprovar o utilizador.");
         }
     };
     
     return (
         <div className="animate-fade-in">
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Gerenciar Usuários</h1>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Gerir Utilizadores</h1>
             <div className="bg-white rounded-2xl shadow-md overflow-hidden">
                 <table className="w-full text-sm text-left text-gray-500">
                     <thead className="text-xs text-gray-700 uppercase bg-gray-100">
@@ -1363,7 +1357,7 @@ const LoginScreen = () => {
 
                 if (!userDoc.exists() || userDoc.data().status !== 'approved') {
                     await signOut(auth);
-                    setError("Sua conta está pendente de aprovação ou não foi encontrada.");
+                    setError("A sua conta está pendente de aprovação ou não foi encontrada.");
                 }
                 // If approved, the onAuthStateChanged listener will handle the redirect.
             } catch (err) {
@@ -1385,7 +1379,7 @@ const LoginScreen = () => {
                 });
 
                 await signOut(auth);
-                setMessage('Cadastro concluído! Sua conta está agora pendente de aprovação pelo administrador.');
+                setMessage('Registo concluído! A sua conta está agora pendente de aprovação pelo administrador.');
 
             } catch (err) {
                 switch(err.code) {
@@ -1393,7 +1387,7 @@ const LoginScreen = () => {
                         setError('Formato de e-mail inválido.');
                         break;
                     case 'auth/email-already-in-use':
-                        setError('Este e-mail já está em uso.');
+                        setError('Este e-mail já está a ser utilizado.');
                         break;
                     case 'auth/weak-password':
                         setError('A senha deve ter pelo menos 6 caracteres.');
@@ -1412,7 +1406,7 @@ const LoginScreen = () => {
                 <div className="text-center">
                     <LucideClipboardEdit className="h-12 w-12 text-indigo-600 mx-auto" />
                     <h1 className="text-3xl font-bold text-gray-800 mt-2">Gestor Próteses</h1>
-                    <p className="text-gray-500">{isLogin ? 'Faça login para continuar' : 'Crie sua conta'}</p>
+                    <p className="text-gray-500">{isLogin ? 'Faça login para continuar' : 'Crie a sua conta'}</p>
                 </div>
                 {message ? (
                     <p className="text-green-600 bg-green-50 p-4 rounded-lg text-center">{message}</p>
@@ -1446,7 +1440,6 @@ const AppLayout = ({ user, userProfile }) => {
     const [serviceOrders, setServiceOrders] = useState([]);
     const [priceTables, setPriceTables] = useState([]);
     const [inventory, setInventory] = useState([]);
-    const [payables, setPayables] = useState([]);
     
     useEffect(() => {
         if (!user) return;
@@ -1457,8 +1450,7 @@ const AppLayout = ({ user, userProfile }) => {
             services: setServices,
             serviceOrders: setServiceOrders,
             priceTables: setPriceTables,
-            inventory: setInventory,
-            payables: setPayables,
+            inventory: setInventory
         };
 
         const unsubscribers = Object.entries(collections).map(([name, setter]) => {
@@ -1488,7 +1480,7 @@ const AppLayout = ({ user, userProfile }) => {
     const renderPage = () => {
         switch (activePage) {
             case 'dashboard':
-                return <Dashboard setActivePage={setActivePage} serviceOrders={serviceOrders} inventory={inventory} payables={payables} />;
+                return <Dashboard setActivePage={setActivePage} serviceOrders={serviceOrders} inventory={inventory} />;
             case 'clients':
                 return <ManageGeneric
                     collectionName="clients"
@@ -1601,7 +1593,7 @@ const AppLayout = ({ user, userProfile }) => {
             case 'inventory':
                 return <ManageGeneric
                     collectionName="inventory"
-                    title="Controle de Estoque"
+                    title="Controlo de Estoque"
                     fields={[
                         { name: 'itemName', label: 'Nome do Item', type: 'text', required: true },
                         { name: 'supplier', label: 'Fornecedor (Opcional)', type: 'text' },
@@ -1646,8 +1638,6 @@ const AppLayout = ({ user, userProfile }) => {
                 return <PriceTables userId={user.uid} services={services} />;
             case 'service-orders':
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
-            case 'financeiro':
-                return <Finance userId={user.uid} serviceOrders={serviceOrders} payables={payables} />;
             case 'reports':
                 return <Reports orders={serviceOrders} employees={employees} clients={clients}/>;
             case 'user-management':
@@ -1691,10 +1681,9 @@ const AppLayout = ({ user, userProfile }) => {
                             <NavItem icon={<LucideHammer />} label="Serviços" page="services" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideDollarSign />} label="Tabelas de Preços" page="price-tables" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideBoxes />} label="Estoque" page="inventory" activePage={activePage} setActivePage={setActivePage} />
-                            <NavItem icon={<LucideTrendingUp />} label="Financeiro" page="financeiro" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideBarChart3 />} label="Relatórios" page="reports" activePage={activePage} setActivePage={setActivePage} />
                             {userProfile?.role === 'admin' && (
-                                <NavItem icon={<LucideUserCheck />} label="Gerenciar Usuários" page="user-management" activePage={activePage} setActivePage={setActivePage} />
+                                <NavItem icon={<LucideUserCheck />} label="Gerir Utilizadores" page="user-management" activePage={activePage} setActivePage={setActivePage} />
                             )}
                         </ul>
                     </div>
@@ -1734,7 +1723,7 @@ export default function App() {
                         setUserProfile(null);
                     }
                 } catch (error) {
-                    console.error("Erro ao verificar o perfil do usuário:", error);
+                    console.error("Erro ao verificar o perfil do utilizador:", error);
                     await signOut(auth);
                     setUser(null);
                     setUserProfile(null);
@@ -1754,3 +1743,5 @@ export default function App() {
 
     return user ? <AppLayout user={user} userProfile={userProfile} /> : <LoginScreen />;
 }
+
+
