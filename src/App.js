@@ -80,28 +80,23 @@ const Spinner = () => (
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <p className="mt-4 text-gray-500">A carregar...</p>
+            <p className="mt-4 text-gray-500">Carregando...</p>
         </div>
     </div>
 );
 
 // --- Main Application Components ---
 
-const Dashboard = ({ setActivePage, serviceOrders, inventory, payables }) => {
+const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
     const upcomingOrders = serviceOrders
         .filter(o => o.status !== 'Concluído' && o.deliveryDate)
         .sort((a, b) => new Date(a.deliveryDate) - new Date(b.deliveryDate))
         .slice(0, 5);
+
+    const pendingOrders = serviceOrders.filter(o => o.status === 'Pendente');
+    const inProgressOrders = serviceOrders.filter(o => o.status === 'Em Andamento');
     
     const lowStockItems = inventory.filter(item => item.quantity <= item.lowStockThreshold);
-    
-    const totalToReceive = serviceOrders
-        .filter(o => o.status === 'Concluído' && o.paymentStatus !== 'pago')
-        .reduce((sum, o) => sum + o.totalValue, 0);
-
-    const totalToPay = payables
-        .filter(p => p.status !== 'pago')
-        .reduce((sum, p) => sum + p.amount, 0);
 
     const StatCard = ({ icon, label, value, color }) => (
         <div className={`bg-white p-6 rounded-2xl shadow-md flex items-center gap-4 border-l-4 ${color}`}>
@@ -116,11 +111,10 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory, payables }) => {
     return (
         <div className="animate-fade-in space-y-8">
             <h1 className="text-3xl font-bold text-gray-800">Painel de Controle</h1>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                 <StatCard icon={<LucideListOrdered size={40} className="text-blue-500" />} label="Ordens Ativas" value={serviceOrders.filter(o => o.status === 'Pendente' || o.status === 'Em Andamento').length} color="border-blue-500" />
-                 <StatCard icon={<LucideTrendingUp size={40} className="text-green-500" />} label="A Receber" value={`R$ ${totalToReceive.toFixed(2)}`} color="border-green-500" />
-                 <StatCard icon={<LucideTrendingDown size={40} className="text-red-500" />} label="A Pagar" value={`R$ ${totalToPay.toFixed(2)}`} color="border-red-500" />
-                 <StatCard icon={<LucideBoxes size={40} className="text-yellow-500" />} label="Itens em Estoque Baixo" value={lowStockItems.length} color="border-yellow-500" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <StatCard icon={<LucideClock size={40} className="text-yellow-500" />} label="Ordens Pendentes" value={pendingOrders.length} color="border-yellow-500" />
+                 <StatCard icon={<LucideHammer size={40} className="text-blue-500" />} label="Em Andamento" value={inProgressOrders.length} color="border-blue-500" />
+                 <StatCard icon={<LucideCheckCircle size={40} className="text-green-500" />} label="Ordens Concluídas" value={serviceOrders.filter(o => o.status === 'Concluído').length} color="border-green-500" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -745,7 +739,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 <div className="grid grid-cols-2 gap-6">
                     <div>
                         <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Disponíveis</h3>
-                        {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-indigo-600 mb-2">A aplicar preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
+                        {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-indigo-600 mb-2">Aplicando preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
                         <div className="max-h-60 overflow-y-auto p-3 bg-gray-50 border rounded-lg">
                             {availableServices.map(service => (
                                 <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-200 cursor-pointer transition-colors">
@@ -1302,13 +1296,13 @@ const UserManagement = ({ userId }) => {
             });
         } catch (error) {
             console.error("Error approving user: ", error);
-            alert("Ocorreu um erro ao aprovar o utilizador.");
+            alert("Ocorreu um erro ao aprovar o usuário.");
         }
     };
     
     return (
         <div className="animate-fade-in">
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Gerir Utilizadores</h1>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Gerenciar Usuários</h1>
             <div className="bg-white rounded-2xl shadow-md overflow-hidden">
                 <table className="w-full text-sm text-left text-gray-500">
                     <thead className="text-xs text-gray-700 uppercase bg-gray-100">
@@ -1369,7 +1363,7 @@ const LoginScreen = () => {
 
                 if (!userDoc.exists() || userDoc.data().status !== 'approved') {
                     await signOut(auth);
-                    setError("A sua conta está pendente de aprovação ou não foi encontrada.");
+                    setError("Sua conta está pendente de aprovação ou não foi encontrada.");
                 }
                 // If approved, the onAuthStateChanged listener will handle the redirect.
             } catch (err) {
@@ -1391,7 +1385,7 @@ const LoginScreen = () => {
                 });
 
                 await signOut(auth);
-                setMessage('Registo concluído! A sua conta está agora pendente de aprovação pelo administrador.');
+                setMessage('Cadastro concluído! Sua conta está agora pendente de aprovação pelo administrador.');
 
             } catch (err) {
                 switch(err.code) {
@@ -1399,7 +1393,7 @@ const LoginScreen = () => {
                         setError('Formato de e-mail inválido.');
                         break;
                     case 'auth/email-already-in-use':
-                        setError('Este e-mail já está a ser utilizado.');
+                        setError('Este e-mail já está em uso.');
                         break;
                     case 'auth/weak-password':
                         setError('A senha deve ter pelo menos 6 caracteres.');
@@ -1418,7 +1412,7 @@ const LoginScreen = () => {
                 <div className="text-center">
                     <LucideClipboardEdit className="h-12 w-12 text-indigo-600 mx-auto" />
                     <h1 className="text-3xl font-bold text-gray-800 mt-2">Gestor Próteses</h1>
-                    <p className="text-gray-500">{isLogin ? 'Faça login para continuar' : 'Crie a sua conta'}</p>
+                    <p className="text-gray-500">{isLogin ? 'Faça login para continuar' : 'Crie sua conta'}</p>
                 </div>
                 {message ? (
                     <p className="text-green-600 bg-green-50 p-4 rounded-lg text-center">{message}</p>
@@ -1607,7 +1601,7 @@ const AppLayout = ({ user, userProfile }) => {
             case 'inventory':
                 return <ManageGeneric
                     collectionName="inventory"
-                    title="Controlo de Estoque"
+                    title="Controle de Estoque"
                     fields={[
                         { name: 'itemName', label: 'Nome do Item', type: 'text', required: true },
                         { name: 'supplier', label: 'Fornecedor (Opcional)', type: 'text' },
@@ -1698,7 +1692,7 @@ const AppLayout = ({ user, userProfile }) => {
                             <NavItem icon={<LucideTrendingUp />} label="Financeiro" page="financeiro" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideBarChart3 />} label="Relatórios" page="reports" activePage={activePage} setActivePage={setActivePage} />
                             {userProfile?.role === 'admin' && (
-                                <NavItem icon={<LucideUserCheck />} label="Gerir Utilizadores" page="user-management" activePage={activePage} setActivePage={setActivePage} />
+                                <NavItem icon={<LucideUserCheck />} label="Gerenciar Usuários" page="user-management" activePage={activePage} setActivePage={setActivePage} />
                             )}
                         </ul>
                     </div>
@@ -1738,7 +1732,7 @@ export default function App() {
                         setUserProfile(null);
                     }
                 } catch (error) {
-                    console.error("Erro ao verificar o perfil do utilizador:", error);
+                    console.error("Erro ao verificar o perfil do usuário:", error);
                     await signOut(auth);
                     setUser(null);
                     setUserProfile(null);
