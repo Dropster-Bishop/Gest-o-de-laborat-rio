@@ -102,6 +102,7 @@ const StatCard = ({ icon, label, value, color }) => (
     </div>
 );
 
+
 // --- Componentes das Páginas ---
 
 const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
@@ -336,41 +337,40 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState([]);
-    const [selectedServices, setSelectedServices] = useState(order ? order.services : []);
-    const [totalValue, setTotalValue] = useState(order ? order.totalValue : 0);
-    const [commissionValue, setCommissionValue] = useState(order ? order.commissionValue : 0);
-    const [selectedEmployeeId, setSelectedEmployeeId] = useState(order ? order.employeeId : '');
+    const [selectedServices, setSelectedServices] = useState(order?.services || []);
+    const [totalValue, setTotalValue] = useState(order?.totalValue || 0);
+    const [commissionValue, setCommissionValue] = useState(order?.commissionValue || 0);
+    const [selectedEmployeeId, setSelectedEmployeeId] = useState(order?.employeeId || '');
     const formRef = useRef({});
 
     useEffect(() => {
         const client = clients.find(c => c.id === selectedClientId);
         const priceTableId = client?.priceTableId;
 
+        const baseServices = services.map(s => ({ ...s, displayPrice: s.price }));
+
         if (priceTableId) {
             const table = priceTables.find(pt => pt.id === priceTableId);
             if (table && table.services) {
-                const servicesForTable = table.services.map(tableService => {
-                    const globalService = services.find(s => s.id === tableService.serviceId);
-                    return {
-                        ...globalService,
-                        id: tableService.serviceId,
-                        name: tableService.serviceName,
-                        displayPrice: tableService.customPrice,
-                    };
-                }).filter(s => s.id);
+                const tableServiceMap = new Map(table.services.map(ts => [ts.serviceId, ts]));
+                const servicesForTable = baseServices.map(bs => {
+                    if (tableServiceMap.has(bs.id)) {
+                        const tableService = tableServiceMap.get(bs.id);
+                        return { ...bs, displayPrice: tableService.customPrice, name: tableService.serviceName };
+                    }
+                    return bs;
+                });
                 setAvailableServices(servicesForTable);
             } else {
-                setAvailableServices(services.map(s => ({ ...s, displayPrice: s.price })));
+                setAvailableServices(baseServices);
             }
         } else {
-            setAvailableServices(services.map(s => ({ ...s, displayPrice: s.price })));
+            setAvailableServices(baseServices);
         }
 
-        // Reset selected services only if client changes and it's not the initial load
         if (order?.clientId !== selectedClientId) {
-             setSelectedServices([]);
+            setSelectedServices([]);
         }
-
     }, [selectedClientId, clients, priceTables, services, order]);
 
     useEffect(() => {
@@ -386,7 +386,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         } else {
             setCommissionValue(0);
         }
-
     }, [selectedServices, selectedEmployeeId, employees]);
 
     const handleServiceToggle = (service) => {
@@ -435,11 +434,11 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             employee: employee,
             openDate: formRef.current.openDate.value,
             deliveryDate: formRef.current.deliveryDate.value,
-            completionDate: formRef.current.completionDate.value || null,
-            status: formRef.current.status.value,
+            completionDate: formRef.current.completionDate?.value || null,
+            status: formRef.current.status?.value || 'Pendente',
             services: selectedServices,
             totalValue,
-            commissionPercentage: employee.commission,
+            commissionPercentage: employee.commission || 0,
             commissionValue,
             observations: formRef.current.observations.value,
             updatedAt: serverTimestamp()
@@ -464,23 +463,19 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     return (
         <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
             <form onSubmit={handleSubmit} className="space-y-6">
-                 {/* FORM CONTENT IS THE SAME AS PREVIOUS RESPONSES */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 {/* Conteúdo do formulário da O.S. */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-4">
                         <div>
                             <label htmlFor="clientId" className="block text-sm font-medium text-gray-700 mb-1">Cliente (Dentista/Clínica)</label>
-                            <select id="clientId" value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" required>
+                            <select id="clientId" value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg" required>
                                 <option value="">Selecione um cliente</option>
                                 {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>
                         <div>
                             <label htmlFor="employeeId" className="block text-sm font-medium text-gray-700 mb-1">Funcionário Responsável</label>
-                            <select
-                                id="employeeId"
-                                value={selectedEmployeeId}
-                                onChange={e => setSelectedEmployeeId(e.target.value)}
-                                className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" required>
+                            <select id="employeeId" value={selectedEmployeeId} onChange={e => setSelectedEmployeeId(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg" required>
                                 <option value="">Selecione um funcionário</option>
                                 {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                             </select>
@@ -500,15 +495,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Disponíveis</h3>
                         <div className="max-h-60 overflow-y-auto p-3 bg-gray-50 border rounded-lg">
                             {availableServices.map(service => (
-                                <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-200 cursor-pointer transition-colors">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedServices.some(s => s.id === service.id)}
-                                        onChange={() => handleServiceToggle(service)}
-                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                    />
+                                <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-200 cursor-pointer">
+                                    <input type="checkbox" checked={selectedServices.some(s => s.id === service.id)} onChange={() => handleServiceToggle(service)} className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
                                     <span className="flex-1 text-sm text-gray-700">{service.name}</span>
-                                    <span className={`text-sm font-semibold`}>R$ {service.displayPrice?.toFixed(2)}</span>
+                                    <span className="text-sm font-semibold">R$ {service.displayPrice?.toFixed(2)}</span>
                                 </label>
                             ))}
                         </div>
@@ -528,131 +518,200 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         </div>
                     </div>
                 </div>
-
-                <div className="flex justify-end gap-3 pt-4">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div>
+                         <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                         <select id="status" ref={el => formRef.current.status = el} defaultValue={order?.status || 'Pendente'} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg" required>
+                             <option>Pendente</option>
+                             <option>Em Andamento</option>
+                             <option>Concluído</option>
+                             <option>Cancelado</option>
+                         </select>
+                     </div>
+                     <Input label="Data de Conclusão" id="completionDate" type="date" ref={el => formRef.current.completionDate = el} defaultValue={order?.completionDate}/>
+                 </div>
+                 <div>
+                     <label htmlFor="observations" className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+                     <textarea id="observations" ref={el => formRef.current.observations = el} defaultValue={order?.observations} rows="3" className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg"></textarea>
+                 </div>
+                <div className="flex justify-end gap-3 pt-4 border-t">
                     <Button type="button" onClick={onClose} variant="secondary">Cancelar</Button>
                     <Button type="submit" variant="primary">Salvar Ordem de Serviço</Button>
                 </div>
             </form>
         </Modal>
-    )
+    );
 };
 
 const ServiceOrders = ({ userId, services, clients, employees, orders, priceTables }) => {
-    // Componente ServiceOrders permanece o mesmo
-    return <div className="animate-fade-in">Página de Ordens de Serviço...</div>;
-};
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+    const [currentOrder, setCurrentOrder] = useState(null);
+    const [filter, setFilter] = useState('Todos');
+    const printRef = useRef();
 
-const Reports = ({ orders, employees, clients }) => {
-    // Componente Reports permanece o mesmo
-    return <div className="animate-fade-in">Página de Relatórios...</div>;
-};
+    const handleOpenModal = (order = null) => {
+        setCurrentOrder(order);
+        setIsModalOpen(true);
+    };
 
-const PriceTables = ({ userId, services }) => {
-    // Componente PriceTables permanece o mesmo
-    return <div className="animate-fade-in">Página de Tabelas de Preços...</div>;
-};
+    const handleOpenViewModal = (order) => {
+        setCurrentOrder(order);
+        setIsViewModalOpen(true);
+    };
 
-const UserManagement = ({ userId }) => {
-    // Componente UserManagement permanece o mesmo
-     return <div className="animate-fade-in">Página de Gestão de Utilizadores...</div>;
-};
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setIsViewModalOpen(false);
+        setCurrentOrder(null);
+    };
 
-
-// --- Componentes Financeiros (VERSÃO ATUALIZADA) ---
-
-const ReceivableFormModal = ({ client, onSubmit, onClose }) => {
-    const [amount, setAmount] = useState('');
-    const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
-    const [notes, setNotes] = useState('');
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (!amount || parseFloat(amount) <= 0) {
-            alert('Por favor, insira um valor válido.');
+    const handleDelete = async (id) => {
+        if (!userId) return;
+        if (window.confirm('Tem certeza que deseja excluir esta ordem de serviço?')) {
+            try {
+                const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, id);
+                await deleteDoc(docRef);
+            } catch (error) {
+                console.error("Error deleting service order: ", error);
+            }
+        }
+    };
+    
+    const generatePdf = (action = 'print') => {
+        const input = printRef.current;
+        if (!input || !window.html2canvas || !window.jspdf) {
+            alert('Não foi possível gerar o PDF. Bibliotecas (html2canvas, jspdf) precisam estar carregadas.');
             return;
         }
-        onSubmit({
-            clientId: client.id,
-            clientName: client.name,
-            amount: parseFloat(amount),
-            paymentDate,
-            notes
+
+        window.html2canvas(input, { scale: 2 }).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const ratio = canvas.width / canvas.height;
+            const width = pdfWidth - 20;
+            const height = width / ratio;
+            pdf.addImage(imgData, 'PNG', 10, 10, width, height);
+
+            if (action === 'print') {
+                pdf.autoPrint();
+                window.open(pdf.output('bloburl'), '_blank');
+            } else {
+                pdf.save(`OS_${currentOrder.number}.pdf`);
+            }
         });
     };
 
-    return (
-        <Modal onClose={onClose} title={`Registrar Recebimento para: ${client.name}`}>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <Input
-                    label="Valor Recebido (R$)"
-                    type="number"
-                    value={amount}
-                    onChange={e => setAmount(e.target.value)}
-                    required
-                    step="0.01"
-                    placeholder="0,00"
-                />
-                <Input
-                    label="Data do Recebimento"
-                    type="date"
-                    value={paymentDate}
-                    onChange={e => setPaymentDate(e.target.value)}
-                    required
-                />
-                <div>
-                    <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">Observações (Opcional)</label>
-                    <textarea
-                        id="notes"
-                        value={notes}
-                        onChange={e => setNotes(e.target.value)}
-                        rows="3"
-                        className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg"
-                    ></textarea>
-                </div>
-                <div className="flex justify-end gap-3 pt-4">
-                    <Button type="button" onClick={onClose} variant="secondary">Cancelar</Button>
-                    <Button type="submit" variant="primary">Registrar</Button>
-                </div>
-            </form>
-        </Modal>
-    );
-};
+    const handlePrint = () => generatePdf('print');
+    const handleSaveAsPdf = () => generatePdf('save');
 
-const PaymentForm = ({ onSubmit, payment }) => {
-    const [description, setDescription] = useState(payment?.description || '');
-    const [amount, setAmount] = useState(payment?.amount || '');
-    const [category, setCategory] = useState(payment?.category || 'Materiais');
-    const [paymentDate, setPaymentDate] = useState(payment?.paymentDate || new Date().toISOString().split('T')[0]);
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onSubmit({ description, amount: parseFloat(amount), category, paymentDate });
-        // Assume que o modal será fechado pelo componente pai
+    const handleStatusChange = async (orderId, newStatus) => {
+        if (!userId) return;
+        const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
+        try {
+            const updateData = { status: newStatus };
+            if (newStatus === 'Concluído') {
+                updateData.completionDate = new Date().toISOString().split('T')[0];
+            }
+            await updateDoc(docRef, updateData);
+        } catch (error) {
+            console.error("Error updating status: ", error);
+        }
     };
 
+    const getStatusClasses = (status) => {
+        switch (status) {
+            case 'Concluído': return 'bg-green-100 text-green-800';
+            case 'Pendente': return 'bg-yellow-100 text-yellow-800';
+            case 'Em Andamento': return 'bg-blue-100 text-blue-800';
+            case 'Cancelado': return 'bg-red-100 text-red-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
+
+    const filteredOrders = orders.filter(order => filter === 'Todos' || order.status === filter);
+
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <Input label="Descrição" value={description} onChange={e => setDescription(e.target.value)} required />
-            <Input label="Valor (R$)" type="number" value={amount} onChange={e => setAmount(e.target.value)} required step="0.01" />
-            <div>
-                 <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                 <select id="category" value={category} onChange={e => setCategory(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg">
-                    <option>Materiais</option>
-                    <option>Salários</option>
-                    <option>Fornecedores (Dentais)</option>
-                    <option>Contas (Água, Luz, etc.)</option>
-                    <option>Impostos</option>
-                    <option>Outros</option>
-                 </select>
+        <div className="animate-fade-in">
+            <header className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                <h1 className="text-3xl font-bold text-gray-800">Ordens de Serviço</h1>
+                <div className="w-full md:w-auto flex items-center gap-2">
+                    <select value={filter} onChange={(e) => setFilter(e.target.value)} className="w-full md:w-auto bg-white border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500">
+                        <option>Todos</option>
+                        <option>Pendente</option>
+                        <option>Em Andamento</option>
+                        <option>Concluído</option>
+                        <option>Cancelado</option>
+                    </select>
+                    <Button onClick={() => handleOpenModal()}><LucidePlusCircle size={20} /> Nova O.S.</Button>
+                </div>
+            </header>
+
+            <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-gray-500">
+                        <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                            <tr>
+                                <th scope="col" className="px-6 py-3">Nº O.S.</th>
+                                <th scope="col" className="px-6 py-3">Cliente</th>
+                                <th scope="col" className="px-6 py-3">Paciente</th>
+                                <th scope="col" className="px-6 py-3">Data Entrega</th>
+                                <th scope="col" className="px-6 py-3">Status</th>
+                                <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredOrders.map(order => (
+                                <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
+                                    <td className="px-6 py-4 font-medium text-gray-900">#{order.number}</td>
+                                    <td className="px-6 py-4">{order.clientName}</td>
+                                    <td className="px-6 py-4">{order.patientName}</td>
+                                    <td className="px-6 py-4">{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A'}</td>
+                                    <td className="px-6 py-4">
+                                        <select value={order.status} onChange={(e) => handleStatusChange(order.id, e.target.value)} className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs border-none appearance-none focus:ring-0 cursor-pointer ${getStatusClasses(order.status)}`} style={{ WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}>
+                                            <option value="Pendente">Pendente</option>
+                                            <option value="Em Andamento">Em Andamento</option>
+                                            <option value="Concluído">Concluído</option>
+                                            <option value="Cancelado">Cancelado</option>
+                                        </select>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <div className="flex justify-center items-center gap-2">
+                                            <button onClick={() => handleOpenViewModal(order)} title="Visualizar" className="text-indigo-600 hover:text-indigo-900 p-1"><LucideSearch size={18} /></button>
+                                            <button onClick={() => handleOpenModal(order)} title="Editar" className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
+                                            <button onClick={() => handleDelete(order.id)} title="Excluir" className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {filteredOrders.length === 0 && <p className="text-center p-8 text-gray-500">Nenhuma ordem de serviço encontrada.</p>}
+                </div>
             </div>
-            <Input label="Data do Pagamento" type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required />
-            <div className="flex justify-end gap-3 pt-4">
-                <Button type="submit" variant="primary">Salvar</Button>
-            </div>
-        </form>
+
+            {isModalOpen && <OrderFormModal onClose={handleCloseModal} order={currentOrder} userId={userId} services={services} clients={clients} employees={employees} orders={orders} priceTables={priceTables} />}
+            {isViewModalOpen && currentOrder && (
+                <Modal onClose={handleCloseModal} title={`Detalhes da O.S. #${currentOrder.number}`}>
+                     <div ref={printRef} className="p-4 bg-white text-gray-800">
+                        {/* Conteúdo para impressão/visualização */}
+                    </div>
+                    <footer className="flex justify-end gap-3 pt-4 border-t mt-4 p-4">
+                        <Button onClick={handleSaveAsPdf}><LucideFileDown size={18} /> Salvar PDF</Button>
+                        <Button onClick={handlePrint} variant="primary"><LucidePrinter size={18} /> Imprimir</Button>
+                    </footer>
+                </Modal>
+            )}
+        </div>
     );
 };
+
+// ... Os outros componentes (Reports, PriceTables, UserManagement) vão aqui ...
+
+
+// --- MÓDULO FINANCEIRO ATUALIZADO ---
 
 const Financials = ({ userId, orders, clients }) => {
     const [activeTab, setActiveTab] = useState('summary');
@@ -679,6 +738,10 @@ const Financials = ({ userId, orders, clients }) => {
         setCurrentPayment(payment);
         setPaymentModalOpen(true);
     };
+    const handleClosePaymentModal = () => {
+        setPaymentModalOpen(false);
+        setCurrentPayment(null);
+    };
     const handleSavePayment = async (paymentData) => {
         const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/payments`);
         try {
@@ -688,19 +751,23 @@ const Financials = ({ userId, orders, clients }) => {
                 await addDoc(collectionRef, { ...paymentData, createdAt: serverTimestamp() });
             }
         } catch (error) { console.error("Error saving payment:", error); }
-        setPaymentModalOpen(false);
+        handleClosePaymentModal();
     };
 
     const handleOpenReceivableModal = (client) => {
         setCurrentClientForPayment(client);
         setReceivableModalOpen(true);
     };
+     const handleCloseReceivableModal = () => {
+        setReceivableModalOpen(false);
+        setCurrentClientForPayment(null);
+    };
     const handleSaveReceivable = async (receivableData) => {
         const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/receivables`);
         try {
              await addDoc(collectionRef, { ...receivableData, createdAt: serverTimestamp() });
         } catch(error) { console.error("Error saving receivable:", error); }
-        setReceivableModalOpen(false);
+        handleCloseReceivableModal();
     };
 
     const clientFinancials = clients.map(client => {
@@ -781,7 +848,6 @@ const Financials = ({ userId, orders, clients }) => {
                                     <span className="font-bold text-red-600 text-right">- R$ {p.amount.toFixed(2)}</span>
                                     <div className="flex justify-end gap-2">
                                        <button onClick={() => handleOpenPaymentModal(p)} title="Editar" className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><LucideEdit size={18}/></button>
-                                       {/* Adicionar delete aqui se necessário */}
                                     </div>
                                 </div>
                             ))}
@@ -814,21 +880,15 @@ const Financials = ({ userId, orders, clients }) => {
             <div className="mb-6">
                  <div className="border-b border-gray-200">
                     <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                        <button onClick={() => setActiveTab('summary')} className={`${activeTab === 'summary' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
-                            Resumo
-                        </button>
-                        <button onClick={() => setActiveTab('receivables')} className={`${activeTab === 'receivables' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
-                            Recebimentos
-                        </button>
-                         <button onClick={() => setActiveTab('payments')} className={`${activeTab === 'payments' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
-                            Pagamentos (Despesas)
-                        </button>
+                        <button onClick={() => setActiveTab('summary')} className={`${activeTab === 'summary' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Resumo</button>
+                        <button onClick={() => setActiveTab('receivables')} className={`${activeTab === 'receivables' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Recebimentos</button>
+                        <button onClick={() => setActiveTab('payments')} className={`${activeTab === 'payments' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Pagamentos (Despesas)</button>
                     </nav>
                 </div>
             </div>
             {renderContent()}
-            {isPaymentModalOpen && <Modal onClose={() => setPaymentModalOpen(false)} title={currentPayment ? 'Editar Despesa' : 'Nova Despesa'}><PaymentForm onSubmit={handleSavePayment} payment={currentPayment} /></Modal>}
-            {isReceivableModalOpen && <ReceivableFormModal client={currentClientForPayment} onSubmit={handleSaveReceivable} onClose={() => setReceivableModalOpen(false)} />}
+            {isPaymentModalOpen && <Modal onClose={handleClosePaymentModal} title={currentPayment ? 'Editar Despesa' : 'Nova Despesa'}><PaymentForm onSubmit={handleSavePayment} payment={currentPayment} /></Modal>}
+            {isReceivableModalOpen && <ReceivableFormModal client={currentClientForPayment} onSubmit={handleSaveReceivable} onClose={handleCloseReceivableModal} />}
         </div>
     );
 };
@@ -897,7 +957,10 @@ const LoginScreen = () => {
                     <p className="text-gray-500">{isLogin ? 'Faça login para continuar' : 'Crie a sua conta'}</p>
                 </div>
                 {message ? (
-                    <p className="text-green-600 bg-green-50 p-4 rounded-lg text-center">{message}</p>
+                    <div className="text-green-600 bg-green-50 p-4 rounded-lg text-center">
+                        <p>{message}</p>
+                        <button onClick={() => { setIsLogin(true); setMessage(''); }} className="font-bold text-indigo-600 mt-2">Ir para o Login</button>
+                    </div>
                 ) : (
                     <form onSubmit={handleAuth} className="space-y-6">
                         <Input label="Email" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
@@ -962,7 +1025,7 @@ const AppLayout = ({ user, userProfile }) => {
             case 'dashboard': return <Dashboard setActivePage={setActivePage} serviceOrders={serviceOrders} inventory={inventory} />;
             case 'service-orders': return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
             case 'financials': return <Financials userId={user.uid} orders={serviceOrders} clients={clients} />;
-            case 'clients': return <ManageGeneric collectionName="clients" title="Clientes" fields={[{ name: 'name', label: 'Nome', type: 'text', required: true }, { name: 'phone', label: 'Telefone', type: 'tel' }]} renderItem={(items, onEdit, onDelete) => ( <div> {items.map(item => <div key={item.id}>{item.name}</div>)} </div>)} />;
+            case 'clients': return <ManageGeneric collectionName="clients" title="Clientes" fields={[{ name: 'name', label: 'Nome', type: 'text', required: true }, { name: 'phone', label: 'Telefone', type: 'tel' }]} renderItem={(items, onEdit, onDelete) => ( <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4"> {items.map(item => <div key={item.id} className="bg-gray-50 p-4 rounded-lg shadow-sm"> <h3 className="font-bold">{item.name}</h3> <p className="text-sm text-gray-600">{item.phone}</p> <div className="flex justify-end gap-2 mt-2"><button onClick={()=>onEdit(item)} className="p-1 text-blue-600"><LucideEdit size={18}/></button><button onClick={()=>onDelete(item.id)} className="p-1 text-red-600"><LucideTrash2 size={18}/></button></div> </div>)} </div>)} />;
             case 'employees': return <ManageGeneric collectionName="employees" title="Funcionários" fields={[{ name: 'name', label: 'Nome', type: 'text', required: true }]} renderItem={(items, onEdit, onDelete) => ( <div> {items.map(item => <div key={item.id}>{item.name}</div>)} </div>)} />;
             case 'services': return <ManageGeneric collectionName="services" title="Serviços" fields={[{ name: 'name', label: 'Nome', type: 'text', required: true }]} renderItem={(items, onEdit, onDelete) => ( <div> {items.map(item => <div key={item.id}>{item.name}</div>)} </div>)} />;
             case 'inventory': return <ManageGeneric collectionName="inventory" title="Estoque" fields={[{ name: 'itemName', label: 'Nome', type: 'text', required: true }]} renderItem={(items, onEdit, onDelete) => ( <div> {items.map(item => <div key={item.id}>{item.itemName}</div>)} </div>)} />;
