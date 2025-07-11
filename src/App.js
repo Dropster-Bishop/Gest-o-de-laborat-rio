@@ -65,8 +65,9 @@ const Modal = ({ children, onClose, title, size = '2xl' }) => (
     </div>
 );
 
-const Input = React.forwardRef(({ label, id, ...props }, ref) => (
-    <div>
+// MODIFICADO: O componente Input agora aplica classes CSS ao seu container principal
+const Input = React.forwardRef(({ label, id, className = '', ...props }, ref) => (
+    <div className={className}>
         {label && <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
         <input id={id} ref={ref} {...props} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200" />
     </div>
@@ -325,7 +326,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState([]);
     
-    // MODIFICADO: Garante que serviços antigos tenham quantidade 1
     const initialServices = (order?.services || []).map(s => ({ ...s, quantity: s.quantity || 1 }));
     const [selectedServices, setSelectedServices] = useState(initialServices);
 
@@ -358,14 +358,12 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             setAvailableServices(services.map(s => ({ ...s, displayPrice: s.price })));
         }
         
-        // Não limpar os serviços selecionados ao mudar o cliente se estiver editando
         if (!order) {
             setSelectedServices([]);
         }
     }, [selectedClientId, clients, priceTables, services, order]);
 
     useEffect(() => {
-        // MODIFICADO: Cálculo de total considera a quantidade
         const newTotal = selectedServices.reduce((sum, s) => sum + (s.price * (s.quantity || 1)), 0);
         setTotalValue(newTotal);
 
@@ -382,7 +380,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     }, [selectedServices, selectedEmployeeId, employees]);
 
     const handleServiceToggle = (service) => {
-        // MODIFICADO: Adiciona quantidade 1 ao selecionar
         const serviceWithDetails = {
             id: service.id,
             name: service.name,
@@ -400,19 +397,18 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     };
 
     const handleServiceDetailChange = (index, field, value) => {
-        // MODIFICADO: Lógica para tratar e validar a quantidade
-        const updatedServices = [...selectedServices];
+        const newServices = [...selectedServices];
         let parsedValue = value;
 
         if (field === 'quantity') {
             parsedValue = parseInt(value, 10);
             if (isNaN(parsedValue) || parsedValue < 1) {
-                parsedValue = 1; // Garante que a quantidade seja no mínimo 1
+                parsedValue = 1;
             }
         }
         
-        updatedServices[index][field] = parsedValue;
-        setSelectedServices(updatedServices);
+        newServices[index] = { ...newServices[index], [field]: parsedValue };
+        setSelectedServices(newServices);
     };
 
     const handleSubmit = async (e) => {
@@ -441,7 +437,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             deliveryDate: formRef.current.deliveryDate.value,
             completionDate: formRef.current.completionDate.value || null,
             status: formRef.current.status.value,
-            services: selectedServices, // Salva os serviços com a quantidade
+            services: selectedServices,
             totalValue,
             commissionPercentage: employee.commission,
             commissionValue,
@@ -469,7 +465,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     return (
         <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
             <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Seção de Cliente, Funcionário e Paciente (sem alterações) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      <div className="space-y-4">
                         <div>
@@ -500,7 +495,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     </div>
                 </div>
 
-                {/* Seção de Serviços Disponíveis e Selecionados */}
                 <div className="grid grid-cols-2 gap-6">
                     <div>
                         <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Disponíveis</h3>
@@ -523,13 +517,12 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     <div>
                         <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Selecionados</h3>
                         <div className="max-h-60 overflow-y-auto p-3 bg-white border rounded-lg space-y-2">
-                             {/* MODIFICADO: Novo layout da tabela de serviços selecionados */}
                              {selectedServices.length > 0 && (
                                 <div className="grid grid-cols-12 gap-2 text-xs font-bold text-gray-500 mb-2 px-1">
                                     <span className="col-span-4">Serviço</span>
                                     <span className="col-span-2">Dente</span>
                                     <span className="col-span-2">Cor</span>
-                                    <span className="col-span-1">Qtd</span>
+                                    <span className="col-span-1 text-center">Qtd</span>
                                     <span className="col-span-2 text-right">Subtotal</span>
                                     <span className="col-span-1"></span>
                                 </div>
@@ -539,7 +532,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                     <span className="col-span-4 text-sm text-gray-800">{service.name}</span>
                                     <Input type="text" placeholder="Dente" value={service.toothNumber} onChange={(e) => handleServiceDetailChange(index, 'toothNumber', e.target.value)} className="col-span-2" />
                                     <Input type="text" placeholder="Cor" value={service.color} onChange={(e) => handleServiceDetailChange(index, 'color', e.target.value)} className="col-span-2" />
-                                    <Input type="number" placeholder="Qtd" value={service.quantity} onChange={(e) => handleServiceDetailChange(index, 'quantity', e.target.value)} className="col-span-1" />
+                                    <Input type="number" placeholder="Qtd" value={service.quantity} onChange={(e) => handleServiceDetailChange(index, 'quantity', e.target.value)} className="col-span-1 text-center" />
                                     <span className="col-span-2 text-sm text-right font-semibold text-gray-800">R$ {(service.price * service.quantity).toFixed(2)}</span>
                                     <button type="button" onClick={() => handleServiceToggle(service)} className="text-red-500 hover:text-red-700 p-1 justify-self-center col-span-1"><LucideTrash2 size={16} /></button>
                                 </div>
@@ -549,7 +542,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     </div>
                 </div>
                 
-                {/* Seção de Status, Datas e Observações (sem alterações) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -568,7 +560,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     <textarea id="observations" ref={el => formRef.current.observations = el} defaultValue={order?.observations} rows="3" className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"></textarea>
                 </div>
 
-                {/* Seção de Totais (sem alterações, pois já é reativa) */}
                 <div className="bg-indigo-50 p-4 rounded-lg text-right">
                     <p className="text-sm text-gray-600">Comissão ({employees.find(e => e.id === selectedEmployeeId)?.commission || 0}%): <span className="font-semibold">R$ {commissionValue.toFixed(2)}</span></p>
                     <p className="text-xl font-bold text-indigo-800">Total: R$ {totalValue.toFixed(2)}</p>
@@ -807,7 +798,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                            </div>
                        </div>
                        <h3 className="font-bold mb-2 border-b">Serviços Solicitados</h3>
-                       {/* MODIFICADO: Tabela de visualização agora inclui Quantidade e Subtotal */}
                        <table className="w-full text-left mb-6">
                            <thead className="bg-gray-100">
                                <tr>
