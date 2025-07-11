@@ -115,7 +115,7 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory, payables }) => {
     
     return (
         <div className="animate-fade-in space-y-8">
-            <h1 className="text-3xl font-bold text-gray-800">Painel de Controlo</h1>
+            <h1 className="text-3xl font-bold text-gray-800">Painel de Controle</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                  <StatCard icon={<LucideListOrdered size={40} className="text-blue-500" />} label="Ordens Ativas" value={serviceOrders.filter(o => o.status === 'Pendente' || o.status === 'Em Andamento').length} color="border-blue-500" />
                  <StatCard icon={<LucideTrendingUp size={40} className="text-green-500" />} label="A Receber" value={`R$ ${totalToReceive.toFixed(2)}`} color="border-green-500" />
