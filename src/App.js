@@ -621,7 +621,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         }
     };
 
-
     const generatePdf = (action = 'print') => {
         const input = printRef.current;
         if (!input || !window.html2canvas || !window.jspdf) {
@@ -638,15 +637,31 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         window.html2canvas(input, { scale: 2 }).then(canvas => {
             if (commissionEl) commissionEl.style.visibility = 'visible';
             if (totalEl) totalEl.style.visibility = 'visible';
-
+            
             const imgData = canvas.toDataURL('image/png');
             const { jsPDF } = window.jspdf;
+
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
-            const ratio = canvas.width / canvas.height;
-            const width = pdfWidth - 20;
-            const height = width / ratio;
-            pdf.addImage(imgData, 'PNG', 10, 10, width, height);
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const imgWidth = canvas.width;
+            const imgHeight = canvas.height;
+            const ratio = imgWidth / imgHeight;
+            let newImgWidth = pdfWidth - 20; // with margin
+            let newImgHeight = newImgWidth / ratio;
+            
+            let heightLeft = newImgHeight;
+            let position = 10; // top margin
+
+            pdf.addImage(imgData, 'PNG', 10, position, newImgWidth, newImgHeight);
+            heightLeft -= (pdfHeight - 20);
+
+            while (heightLeft > 0) {
+                position = -newImgHeight + heightLeft + 10; // Adjust position for next page
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 10, position, newImgWidth, newImgHeight);
+                heightLeft -= (pdfHeight - 20);
+            }
 
             if (action === 'print') {
                 pdf.autoPrint();
@@ -903,6 +918,7 @@ const Reports = ({ orders, employees, clients }) => {
         setResults(data);
     };
     
+    // MODIFICADO: Função de impressão com quebra de página
     const generateReportPdf = (action = 'print') => {
         const input = reportPrintRef.current;
         if (!input || !window.html2canvas || !window.jspdf) {
@@ -910,15 +926,33 @@ const Reports = ({ orders, employees, clients }) => {
             return;
         }
 
-        window.html2canvas(input, { scale: 2 }).then(canvas => {
+        window.html2canvas(input, { scale: 2, useCORS: true }).then(canvas => {
             const imgData = canvas.toDataURL('image/png');
             const { jsPDF } = window.jspdf;
+
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
-            const ratio = canvas.width / canvas.height;
-            const width = pdfWidth - 20;
-            const height = width / ratio;
-            pdf.addImage(imgData, 'PNG', 10, 10, width, height);
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            
+            const ratio = canvasWidth / canvasHeight;
+            const imgWidth = pdfWidth - 20; // Margin
+            const imgHeight = imgWidth / ratio;
+            
+            let heightLeft = imgHeight;
+            let position = 10; // Initial top margin
+
+            pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+            heightLeft -= (pdfHeight - 20); // page height with margin
+
+            while (heightLeft > 0) {
+              position = heightLeft - imgHeight + 10; // Calculate new position for the next page
+              pdf.addPage();
+              pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+              heightLeft -= (pdfHeight - 20);
+            }
 
             if (action === 'print') {
                 pdf.autoPrint();
@@ -1566,6 +1600,7 @@ const Financials = ({ userId, orders }) => {
         </div>
     );
 };
+
 
 // --- Tela de Autenticação ---
 const LoginScreen = () => {
