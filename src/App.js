@@ -1359,6 +1359,136 @@ const PaymentForm = ({ onSubmit, payment }) => {
     );
 }
 
+const ReceiptModal = ({ order, companyProfile, onClose }) => {
+    const receiptRef = useRef();
+
+    const numberToWords = (num) => {
+        if (num === null || num === undefined) return '';
+        const a = ['','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','catorze','quinze','dezesseis','dezessete','dezoito','dezenove'];
+        const b = ['', '', 'vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
+        const c = ['', 'cem', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+        
+        const n = parseFloat(num).toFixed(2).split('.');
+        let a_part = parseInt(n[0]);
+        let b_part = parseInt(n[1]);
+
+        let str = '';
+        if (a_part === 1) str += 'um real';
+        else if (a_part > 1) str += `${process(a_part)} reais`;
+
+        if (b_part > 0) {
+            str += (a_part > 0 ? ' e ' : '') + `${process(b_part)} centavos`;
+        }
+        
+        if (str === '') return 'zero reais';
+        return str.trim();
+
+        function process(number) {
+            let n_str = number.toString();
+            if (number < 20) return a[number];
+            if (n_str.length === 2) return b[n_str[0]] + (n_str[1] !== '0' ? ' e ' + a[n_str[1]] : '');
+            if (n_str.length === 3) {
+                 if (n_str === '100') return 'cem';
+                 return c[n_str[0]] + (n_str.substring(1) !== '00' ? ' e ' + process(parseInt(n_str.substring(1))) : '');
+            }
+            return '';
+        }
+    };
+    
+    const generatePdf = (action = 'print') => {
+        const input = receiptRef.current;
+        if (!input || !window.html2canvas || !window.jspdf) return;
+
+        window.html2canvas(input, { scale: 2 }).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+            if (action === 'print') {
+                pdf.autoPrint();
+                window.open(pdf.output('bloburl'), '_blank');
+            } else {
+                pdf.save(`recibo_os_${order?.number || '000'}.pdf`);
+            }
+        });
+    };
+
+    return (
+        <Modal onClose={onClose} title={`Recibo - O.S. #${order?.number}`} size="4xl">
+            <div className="p-2 bg-gray-200">
+                <div ref={receiptRef} className="bg-white p-8 border" style={{ width: '210mm', minHeight: '297mm', margin: 'auto' }}>
+                    <header className="flex justify-between items-start pb-4 border-b">
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800">{companyProfile?.companyName || 'Nome da Empresa'}</h1>
+                            <p className="text-sm text-gray-600">{companyProfile?.companyAddress || 'Endereço da Empresa'}</p>
+                            <p className="text-sm text-gray-600">CNPJ: {companyProfile?.companyCnpj || '00.000.000/0000-00'}</p>
+                            <p className="text-sm text-gray-600">Tel: {companyProfile?.companyPhone || '(00) 00000-0000'}</p>
+                        </div>
+                        <div className="text-right">
+                            <h2 className="text-xl font-bold text-gray-700">RECIBO</h2>
+                            <p className="text-md font-semibold text-red-600">Nº {String(order?.number || 0).padStart(5, '0')}</p>
+                            <p className="text-xl font-bold mt-2">R$ {(order?.totalValue || 0).toFixed(2)}</p>
+                        </div>
+                    </header>
+
+                    <main className="mt-8">
+                        <div className="mb-8">
+                            <p className="text-md leading-relaxed">
+                                Recebemos de <strong className="font-bold">{order?.clientName || 'Cliente não informado'}</strong>, CNPJ/CPF nº <strong>{order?.client?.document || 'Não informado'}</strong>,
+                                a importância de <strong className="font-bold capitalize">{numberToWords(order?.totalValue || 0)}</strong>,
+                                referente aos serviços de prótese dentária detalhados abaixo, da Ordem de Serviço nº {String(order?.number || 0).padStart(5, '0')}.
+                            </p>
+                        </div>
+                        
+                        <h3 className="font-bold mb-2 border-b pb-1">DETALHAMENTO DOS SERVIÇOS</h3>
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="text-left font-bold bg-gray-100">
+                                    <th className="p-2">Descrição do Serviço</th>
+                                    <th className="p-2 text-center">Qtd.</th>
+                                    <th className="p-2 text-right">Valor Unit.</th>
+                                    <th className="p-2 text-right">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(order?.services || []).map((service, index) => (
+                                    <tr key={index} className="border-b">
+                                        <td className="p-2">{service.name} (Paciente: {order.patientName})</td>
+                                        <td className="p-2 text-center">{service.quantity || 1}</td>
+                                        <td className="p-2 text-right">R$ {(service.price || 0).toFixed(2)}</td>
+                                        <td className="p-2 text-right">R$ {((service.price || 0) * (service.quantity || 1)).toFixed(2)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot>
+                                <tr className="font-bold">
+                                    <td colSpan="3" className="p-2 text-right">VALOR TOTAL</td>
+                                    <td className="p-2 text-right">R$ {(order?.totalValue || 0).toFixed(2)}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </main>
+
+                    <footer className="mt-16 text-center text-sm text-gray-600">
+                        <p>{companyProfile?.companyAddress?.split(',')[0] || 'Sua Cidade'}, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.</p>
+                        <div className="mt-16 pt-4 border-t w-1/2 mx-auto">
+                            <p className="font-bold">{companyProfile?.companyName || 'Nome da Empresa'}</p>
+                            <p>{companyProfile?.companyCnpj || '00.000.000/0000-00'}</p>
+                        </div>
+                    </footer>
+                </div>
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t bg-gray-50">
+                <Button onClick={() => generatePdf('save')} variant="secondary"><LucideFileDown size={18}/> Salvar PDF</Button>
+                <Button onClick={() => generatePdf('print')}><LucidePrinter size={18}/> Imprimir</Button>
+            </div>
+        </Modal>
+    );
+};
+
 const Financials = ({ userId, orders, companyProfile }) => {
     const [activeTab, setActiveTab] = useState('summary');
     const [payments, setPayments] = useState([]);
@@ -1528,7 +1658,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
 
                 return (
                     <div className="space-y-8">
-                         <div>
+                        <div>
                             <h3 className="text-xl font-bold text-gray-700 mb-4">Contas a Receber (por Cliente)</h3>
                             <div className="bg-white rounded-2xl shadow-md p-4 space-y-3">
                                 {Object.keys(unpaidByClient).length > 0 ? Object.values(unpaidByClient).map(client => (
