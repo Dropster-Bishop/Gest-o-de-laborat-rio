@@ -28,7 +28,7 @@ import {
     LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch,
     LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock,
     LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle,
-    LucideChevronDown
+    LucideChevronDown, LucideSettings, LucideFileText
 } from 'lucide-react';
 
 // --- Configuração do Firebase ---
@@ -1359,12 +1359,14 @@ const PaymentForm = ({ onSubmit, payment }) => {
     );
 }
 
-const Financials = ({ userId, orders }) => {
+const Financials = ({ userId, orders, companyProfile }) => {
     const [activeTab, setActiveTab] = useState('summary');
     const [payments, setPayments] = useState([]);
     const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
     const [currentPayment, setCurrentPayment] = useState(null);
     const [expandedClient, setExpandedClient] = useState(null);
+    const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+    const [selectedOrderForReceipt, setSelectedOrderForReceipt] = useState(null);
 
     useEffect(() => {
         if (!userId) return;
@@ -1451,6 +1453,20 @@ const Financials = ({ userId, orders }) => {
         }
     };
 
+    const handleOpenReceiptModal = (order) => {
+        if (!companyProfile?.companyName) {
+            alert('Por favor, preencha os dados da sua empresa na aba "Configurações" antes de gerar um recibo.');
+            return;
+        }
+        setSelectedOrderForReceipt(order);
+        setIsReceiptModalOpen(true);
+    };
+
+    const handleCloseReceiptModal = () => {
+        setSelectedOrderForReceipt(null);
+        setIsReceiptModalOpen(false);
+    };
+
     const receivedOrders = orders.filter(o => o.status === 'Concluído' && o.isPaid);
     const totalReceived = receivedOrders.reduce((sum, r) => sum + r.totalValue, 0);
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
@@ -1512,7 +1528,7 @@ const Financials = ({ userId, orders }) => {
 
                 return (
                     <div className="space-y-8">
-                        <div>
+                         <div>
                             <h3 className="text-xl font-bold text-gray-700 mb-4">Contas a Receber (por Cliente)</h3>
                             <div className="bg-white rounded-2xl shadow-md p-4 space-y-3">
                                 {Object.keys(unpaidByClient).length > 0 ? Object.values(unpaidByClient).map(client => (
@@ -1550,7 +1566,12 @@ const Financials = ({ userId, orders }) => {
                                                             <p>O.S. #{order.number} - R$ {order.totalValue.toFixed(2)}</p>
                                                             <p className="text-sm text-gray-500">Concluído em: {new Date(order.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
                                                          </div>
-                                                        <Button onClick={() => markOrderAsPaid(order, false)} variant="secondary" className="text-xs">Desfazer</Button>
+                                                         <div className="flex items-center gap-2">
+                                                             <Button onClick={() => handleOpenReceiptModal(order)} variant="secondary" className="p-2" title="Gerar Recibo">
+                                                                <LucideFileText size={16} />
+                                                             </Button>
+                                                             <Button onClick={() => markOrderAsPaid(order, false)} variant="secondary" className="text-xs">Desfazer</Button>
+                                                         </div>
                                                      </div>
                                                 ))}
                                             </div>
@@ -1600,6 +1621,64 @@ const Financials = ({ userId, orders }) => {
                     <PaymentForm onSubmit={handleSavePayment} payment={currentPayment} />
                 </Modal>
             )}
+            {isReceiptModalOpen && (
+                <ReceiptModal 
+                    order={selectedOrderForReceipt} 
+                    companyProfile={companyProfile}
+                    onClose={handleCloseReceiptModal}
+                />
+            )}
+        </div>
+    );
+};
+
+const Settings = ({ userId, initialProfile }) => {
+    const [profile, setProfile] = useState(initialProfile || {});
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        setProfile(initialProfile || {});
+    }, [initialProfile]);
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setProfile(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSave = async () => {
+        if (!userId) return;
+        setLoading(true);
+        try {
+            const profileDocRef = doc(db, `artifacts/${appId}/users/${userId}/companyProfile/main`);
+            await setDoc(profileDocRef, profile, { merge: true });
+            alert('Configurações salvas com sucesso!');
+        } catch (error) {
+            console.error("Erro ao salvar configurações:", error);
+            alert('Falha ao salvar as configurações.');
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="animate-fade-in space-y-6">
+            <h1 className="text-3xl font-bold text-gray-800">Configurações da Empresa</h1>
+            <div className="bg-white p-6 rounded-2xl shadow-md">
+                <p className="text-sm text-gray-600 mb-4">
+                    As informações preenchidas aqui serão usadas no cabeçalho dos seus recibos.
+                </p>
+                <div className="space-y-4 max-w-lg">
+                    <Input label="Nome da Empresa / Laboratório" name="companyName" value={profile.companyName || ''} onChange={handleChange} />
+                    <Input label="CNPJ ou CPF" name="companyCnpj" value={profile.companyCnpj || ''} onChange={handleChange} />
+                    <Input label="Endereço Completo" name="companyAddress" value={profile.companyAddress || ''} onChange={handleChange} />
+                    <Input label="Telefone de Contato" name="companyPhone" value={profile.companyPhone || ''} onChange={handleChange} />
+                    <Input label="Email de Contato" name="companyEmail" value={profile.companyEmail || ''} onChange={handleChange} />
+                </div>
+                <div className="mt-6">
+                    <Button onClick={handleSave} disabled={loading}>
+                        {loading ? 'Salvando...' : 'Salvar Configurações'}
+                    </Button>
+                </div>
+            </div>
         </div>
     );
 };
@@ -1703,6 +1782,7 @@ const AppLayout = ({ user, userProfile }) => {
     const [serviceOrders, setServiceOrders] = useState([]);
     const [priceTables, setPriceTables] = useState([]);
     const [inventory, setInventory] = useState([]);
+    const [companyProfile, setCompanyProfile] = useState(null);
 
     useEffect(() => {
         if (!user) return;
@@ -1724,6 +1804,13 @@ const AppLayout = ({ user, userProfile }) => {
                 setter(data);
             });
         });
+        
+        const companyProfileDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/companyProfile/main`);
+        const companyUnsub = onSnapshot(companyProfileDocRef, (doc) => {
+            setCompanyProfile(doc.data());
+        });
+        unsubscribers.push(companyUnsub);
+
         return () => unsubscribers.forEach(unsub => unsub());
     }, [user]);
 
@@ -1897,11 +1984,13 @@ const AppLayout = ({ user, userProfile }) => {
             case 'service-orders':
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
             case 'financials':
-                return <Financials userId={user.uid} orders={serviceOrders} />;
+                return <Financials userId={user.uid} orders={serviceOrders} companyProfile={companyProfile} />;
             case 'reports':
                 return <Reports orders={serviceOrders} employees={employees} clients={clients} />;
             case 'user-management':
                 return <UserManagement userId={user.uid} />;
+            case 'settings':
+                return <Settings userId={user.uid} initialProfile={companyProfile} />;
             default:
                 return <div>Página não encontrada</div>;
         }
@@ -1943,6 +2032,7 @@ const AppLayout = ({ user, userProfile }) => {
                             <NavItem icon={<LucideDollarSign />} label="Tabelas de Preços" page="price-tables" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideBoxes />} label="Estoque" page="inventory" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideBarChart3 />} label="Relatórios" page="reports" activePage={activePage} setActivePage={setActivePage} />
+                            <NavItem icon={<LucideSettings />} label="Configurações" page="settings" activePage={activePage} setActivePage={setActivePage} />
                             {userProfile?.role === 'admin' && (
                                 <NavItem icon={<LucideUserCheck />} label="Gerir Utilizadores" page="user-management" activePage={activePage} setActivePage={setActivePage} />
                             )}
@@ -1963,8 +2053,6 @@ const AppLayout = ({ user, userProfile }) => {
     );
 };
 
-
-// --- Ponto de Entrada da Aplicação ---
 export default function App() {
     const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
@@ -1975,8 +2063,7 @@ export default function App() {
             if (user) {
                 try {
                     const userDocRef = doc(db, "users", user.uid);
-                    // AQUI ESTAVA O ERRO, AGORA CORRIGIDO:
-                    const userDoc = await getDoc(userDocRef); 
+                    const userDoc = await getDoc(userDocRef);
                     if (userDoc.exists() && userDoc.data().status === 'approved') {
                         setUser(user);
                         setUserProfile(userDoc.data());
