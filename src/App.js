@@ -621,6 +621,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         }
     };
 
+    // MODIFICADO: Função de impressão com margens e quebra de página corretas
     const generatePdf = (action = 'print') => {
         const input = printRef.current;
         if (!input || !window.html2canvas || !window.jspdf) {
@@ -634,33 +635,36 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         if (commissionEl) commissionEl.style.visibility = 'hidden';
         if (totalEl) totalEl.style.visibility = 'hidden';
 
-        window.html2canvas(input, { scale: 2 }).then(canvas => {
+        window.html2canvas(input, { scale: 2, useCORS: true }).then(canvas => {
             if (commissionEl) commissionEl.style.visibility = 'visible';
             if (totalEl) totalEl.style.visibility = 'visible';
             
             const imgData = canvas.toDataURL('image/png');
             const { jsPDF } = window.jspdf;
-
             const pdf = new jsPDF('p', 'mm', 'a4');
+
+            const MARGIN = 15;
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
-            const imgWidth = canvas.width;
-            const imgHeight = canvas.height;
-            const ratio = imgWidth / imgHeight;
-            let newImgWidth = pdfWidth - 20; // with margin
-            let newImgHeight = newImgWidth / ratio;
-            
-            let heightLeft = newImgHeight;
-            let position = 10; // top margin
+            const usableWidth = pdfWidth - (MARGIN * 2);
+            const usableHeight = pdfHeight - (MARGIN * 2);
 
-            pdf.addImage(imgData, 'PNG', 10, position, newImgWidth, newImgHeight);
-            heightLeft -= (pdfHeight - 20);
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            const aspectRatio = canvasHeight / canvasWidth;
+            const scaledHeight = usableWidth * aspectRatio;
+
+            let heightLeft = scaledHeight;
+            let position = 0;
+
+            pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledHeight);
+            heightLeft -= usableHeight;
 
             while (heightLeft > 0) {
-                position = -newImgHeight + heightLeft + 10; // Adjust position for next page
-                pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 10, position, newImgWidth, newImgHeight);
-                heightLeft -= (pdfHeight - 20);
+              position -= usableHeight;
+              pdf.addPage();
+              pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledHeight);
+              heightLeft -= usableHeight;
             }
 
             if (action === 'print') {
@@ -918,7 +922,7 @@ const Reports = ({ orders, employees, clients }) => {
         setResults(data);
     };
     
-    // MODIFICADO: Função de impressão com quebra de página
+    // MODIFICADO: Função de impressão com margens e quebra de página corretas
     const generateReportPdf = (action = 'print') => {
         const input = reportPrintRef.current;
         if (!input || !window.html2canvas || !window.jspdf) {
@@ -929,29 +933,30 @@ const Reports = ({ orders, employees, clients }) => {
         window.html2canvas(input, { scale: 2, useCORS: true }).then(canvas => {
             const imgData = canvas.toDataURL('image/png');
             const { jsPDF } = window.jspdf;
-
             const pdf = new jsPDF('p', 'mm', 'a4');
+
+            const MARGIN = 15;
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
-            
+            const usableWidth = pdfWidth - (MARGIN * 2);
+            const usableHeight = pdfHeight - (MARGIN * 2);
+
             const canvasWidth = canvas.width;
             const canvasHeight = canvas.height;
-            
-            const ratio = canvasWidth / canvasHeight;
-            const imgWidth = pdfWidth - 20; // Margin
-            const imgHeight = imgWidth / ratio;
-            
-            let heightLeft = imgHeight;
-            let position = 10; // Initial top margin
+            const aspectRatio = canvasHeight / canvasWidth;
+            const scaledHeight = usableWidth * aspectRatio;
 
-            pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-            heightLeft -= (pdfHeight - 20); // page height with margin
+            let heightLeft = scaledHeight;
+            let position = 0;
+
+            pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledHeight);
+            heightLeft -= usableHeight;
 
             while (heightLeft > 0) {
-              position = heightLeft - imgHeight + 10; // Calculate new position for the next page
+              position -= usableHeight;
               pdf.addPage();
-              pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-              heightLeft -= (pdfHeight - 20);
+              pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledHeight);
+              heightLeft -= usableHeight;
             }
 
             if (action === 'print') {
@@ -1601,8 +1606,6 @@ const Financials = ({ userId, orders }) => {
     );
 };
 
-
-// --- Tela de Autenticação ---
 const LoginScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
@@ -1694,7 +1697,6 @@ const LoginScreen = () => {
     );
 };
 
-// --- Layout Principal da Aplicação ---
 const AppLayout = ({ user, userProfile }) => {
     const [activePage, setActivePage] = useState('dashboard');
     const [clients, setClients] = useState([]);
@@ -1975,7 +1977,7 @@ export default function App() {
             if (user) {
                 try {
                     const userDocRef = doc(db, "users", user.uid);
-                    const userDoc = await getDoc(userDocRef);
+                    const userDoc = await getDoc(userDoc);
                     if (userDoc.exists() && userDoc.data().status === 'approved') {
                         setUser(user);
                         setUserProfile(userDoc.data());
