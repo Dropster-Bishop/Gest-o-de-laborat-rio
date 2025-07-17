@@ -621,7 +621,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         }
     };
 
-    // MODIFICADO: Função de impressão com margens e quebra de página corretas
     const generatePdf = (action = 'print') => {
         const input = printRef.current;
         if (!input || !window.html2canvas || !window.jspdf) {
@@ -922,7 +921,6 @@ const Reports = ({ orders, employees, clients }) => {
         setResults(data);
     };
     
-    // MODIFICADO: Função de impressão com margens e quebra de página corretas
     const generateReportPdf = (action = 'print') => {
         const input = reportPrintRef.current;
         if (!input || !window.html2canvas || !window.jspdf) {
@@ -1977,7 +1975,8 @@ export default function App() {
             if (user) {
                 try {
                     const userDocRef = doc(db, "users", user.uid);
-                    const userDoc = await getDoc(userDoc);
+                    // AQUI ESTAVA O ERRO, AGORA CORRIGIDO:
+                    const userDoc = await getDoc(userDocRef); 
                     if (userDoc.exists() && userDoc.data().status === 'approved') {
                         setUser(user);
                         setUserProfile(userDoc.data());
