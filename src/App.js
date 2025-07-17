@@ -65,7 +65,6 @@ const Modal = ({ children, onClose, title, size = '2xl' }) => (
     </div>
 );
 
-// MODIFICADO: O componente Input agora aplica classes CSS ao seu container principal
 const Input = React.forwardRef(({ label, id, className = '', ...props }, ref) => (
     <div className={className}>
         {label && <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
@@ -852,6 +851,12 @@ const Reports = ({ orders, employees, clients }) => {
     const [results, setResults] = useState([]);
     const reportPrintRef = useRef();
 
+    const reportTitles = {
+        completedByPeriod: 'Relatório de Serviços Concluídos',
+        commissionsByEmployee: 'Relatório de Comissões por Funcionário',
+        ordersByClient: 'Relatório de Ordens por Cliente'
+    };
+
     const handleGenerateReport = () => {
         let data = [];
         if (reportType === 'completedByPeriod') {
@@ -897,12 +902,60 @@ const Reports = ({ orders, employees, clients }) => {
         }
         setResults(data);
     };
+    
+    const generateReportPdf = (action = 'print') => {
+        const input = reportPrintRef.current;
+        if (!input || !window.html2canvas || !window.jspdf) {
+            alert('Não foi possível gerar o PDF. Bibliotecas necessárias não encontradas.');
+            return;
+        }
+
+        window.html2canvas(input, { scale: 2 }).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const ratio = canvas.width / canvas.height;
+            const width = pdfWidth - 20;
+            const height = width / ratio;
+            pdf.addImage(imgData, 'PNG', 10, 10, width, height);
+
+            if (action === 'print') {
+                pdf.autoPrint();
+                window.open(pdf.output('bloburl'), '_blank');
+            } else {
+                pdf.save(`relatorio_${reportType}.pdf`);
+            }
+        }).catch(err => {
+            console.error("Erro ao gerar PDF do relatório:", err);
+            alert("Ocorreu um erro ao gerar o PDF.");
+        });
+    };
+    
+    const handlePrintReport = () => generateReportPdf('print');
+    const handleSaveReportAsPdf = () => generateReportPdf('save');
 
     const totalCommission = reportType === 'commissionsByEmployee'
         ? results.reduce((sum, order) => sum + order.commissionValue, 0)
         : 0;
 
     const totalValue = results.reduce((sum, order) => sum + order.totalValue, 0);
+
+    const getReportSubTitle = () => {
+        let period = '';
+        if (startDate && endDate) {
+            period = `Período: ${new Date(startDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'})} a ${new Date(endDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}`;
+        }
+        if (reportType === 'commissionsByEmployee' && selectedEmployee) {
+            const employeeName = employees.find(e => e.id === selectedEmployee)?.name || '';
+            return `Funcionário: ${employeeName} | ${period}`;
+        }
+        if (reportType === 'ordersByClient' && selectedClient) {
+            const clientName = clients.find(c => c.id === selectedClient)?.name || '';
+            return `Cliente: ${clientName} | ${period}`;
+        }
+        return period;
+    };
 
     return (
         <div className="animate-fade-in">
@@ -945,8 +998,24 @@ const Reports = ({ orders, employees, clients }) => {
             <div className="bg-white p-6 rounded-2xl shadow-md">
                 <div className="flex justify-between items-center mb-4">
                      <h2 className="text-xl font-bold text-gray-700">Resultados</h2>
+                     {results.length > 0 && (
+                        <div className="flex gap-2">
+                             <Button onClick={handleSaveReportAsPdf} variant="secondary">
+                                 <LucideFileDown size={18} /> PDF
+                             </Button>
+                             <Button onClick={handlePrintReport}>
+                                 <LucidePrinter size={18} /> Imprimir
+                             </Button>
+                        </div>
+                     )}
                 </div>
-                <div ref={reportPrintRef}>
+                <div ref={reportPrintRef} className="p-4 rounded-lg">
+                    {results.length > 0 && (
+                        <div className="mb-4">
+                            <h3 className="text-xl font-bold text-gray-800">{reportTitles[reportType]}</h3>
+                            <p className="text-sm text-gray-500">{getReportSubTitle()}</p>
+                        </div>
+                    )}
                     {results.length > 0 ? (
                         <table className="w-full text-sm text-left text-gray-500">
                             <thead className="text-xs text-gray-700 uppercase bg-gray-100">
@@ -964,7 +1033,7 @@ const Reports = ({ orders, employees, clients }) => {
                                     <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
                                         <td className="px-6 py-4 font-medium">#{order.number}</td>
                                         <td className="px-6 py-4">{order.clientName}</td>
-                                        <td className="px-6 py-4">{new Date(reportType.includes('ByPeriod') || reportType.includes('ByEmployee') ? order.completionDate : order.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                        <td className="px-6 py-4">{new Date(reportType === 'completedByPeriod' || reportType === 'commissionsByEmployee' ? order.completionDate : order.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
                                         <td className="px-6 py-4">{order.employeeName}</td>
                                         <td className="px-6 py-4 text-right font-bold">R$ {order.totalValue.toFixed(2)}</td>
                                         {reportType === 'commissionsByEmployee' && <td className="px-6 py-4 text-right">R$ {order.commissionValue.toFixed(2)}</td>}
@@ -988,7 +1057,6 @@ const Reports = ({ orders, employees, clients }) => {
     );
 };
 
-// --- COMPONENTE PriceTables ---
 const PriceTableForm = ({ table, services, onSubmit, onCancel }) => {
     const [name, setName] = useState(table?.name || '');
     const [tableServices, setTableServices] = useState(table?.services || []);
@@ -1146,7 +1214,6 @@ const PriceTables = ({ userId, services }) => {
     );
 };
 
-// --- COMPONENTE UserManagement ---
 const UserManagement = ({ userId }) => {
     const [users, setUsers] = useState([]);
     const usersCollectionRef = collection(db, "users");
@@ -1216,7 +1283,6 @@ const UserManagement = ({ userId }) => {
     );
 };
 
-// --- Formulário de Pagamento (Componente Auxiliar para Financeiro) ---
 const PaymentForm = ({ onSubmit, payment }) => {
     const [description, setDescription] = useState(payment?.description || '');
     const [amount, setAmount] = useState(payment?.amount || '');
@@ -1256,7 +1322,6 @@ const PaymentForm = ({ onSubmit, payment }) => {
     );
 }
 
-// --- COMPONENTE FINANCEIRO ---
 const Financials = ({ userId, orders }) => {
     const [activeTab, setActiveTab] = useState('summary');
     const [payments, setPayments] = useState([]);
@@ -1502,7 +1567,6 @@ const Financials = ({ userId, orders }) => {
     );
 };
 
-
 // --- Tela de Autenticação ---
 const LoginScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
@@ -1594,7 +1658,6 @@ const LoginScreen = () => {
         </div>
     );
 };
-
 
 // --- Layout Principal da Aplicação ---
 const AppLayout = ({ user, userProfile }) => {
