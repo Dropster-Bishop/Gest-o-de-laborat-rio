@@ -2209,7 +2209,7 @@ const AppLayout = ({ user, userProfile }) => {
                 <div>
                     <div className="flex items-center justify-center h-20 border-b">
                         <LucideClipboardEdit className="h-8 w-8 text-indigo-600" />
-                        <h1 className="text-xl font-bold text-gray-800 ml-2">Gestor Próteses</h1>
+                        <h1 className="text-xl font-bold text-gray-800 ml-2">{companyProfile?.companyName || 'Gestor Próteses'}</h1>
                     </div>
                     <div className="p-4">
                         <ul className="space-y-2">
