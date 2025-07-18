@@ -28,7 +28,7 @@ import {
     LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch,
     LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock,
     LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle,
-    LucideChevronDown, LucideSettings, LucideFileText
+    LucideChevronDown, LucideSettings, LucideFileText, LucideTruck
 } from 'lucide-react';
 
 // --- Configuração do Firebase ---
@@ -207,9 +207,13 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
         fields.forEach(field => {
             const inputElement = formRef.current[field.name];
             if (inputElement) {
-                formData[field.name] = inputElement.value;
-                if (field.type === 'number') {
-                    formData[field.name] = parseFloat(formData[field.name]) || 0;
+                if(inputElement.type === 'textarea') {
+                     formData[field.name] = inputElement.value;
+                } else {
+                    formData[field.name] = inputElement.value;
+                    if (field.type === 'number') {
+                        formData[field.name] = parseFloat(formData[field.name]) || 0;
+                    }
                 }
             }
         });
@@ -278,6 +282,21 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                 <Modal onClose={handleCloseModal} title={currentItem ? `Editar ${title.slice(0, -1)}` : `Adicionar ${title.slice(0, -1)}`}>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {fields.map(field => {
+                            if (field.type === 'textarea') {
+                                return (
+                                    <div key={field.name}>
+                                        <label htmlFor={field.name} className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
+                                        <textarea 
+                                            id={field.name}
+                                            name={field.name}
+                                            defaultValue={currentItem ? currentItem[field.name] : ''}
+                                            ref={el => formRef.current[field.name] = el}
+                                            className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                            rows="3"
+                                        />
+                                    </div>
+                                )
+                            }
                             if (field.type === 'select') {
                                 return (
                                     <div key={field.name}>
@@ -1913,6 +1932,7 @@ const AppLayout = ({ user, userProfile }) => {
     const [serviceOrders, setServiceOrders] = useState([]);
     const [priceTables, setPriceTables] = useState([]);
     const [inventory, setInventory] = useState([]);
+    const [suppliers, setSuppliers] = useState([]);
     const [companyProfile, setCompanyProfile] = useState(null);
 
     useEffect(() => {
@@ -1923,7 +1943,8 @@ const AppLayout = ({ user, userProfile }) => {
             services: setServices,
             serviceOrders: setServiceOrders,
             priceTables: setPriceTables,
-            inventory: setInventory
+            inventory: setInventory,
+            suppliers: setSuppliers,
         };
         const unsubscribers = Object.entries(collections).map(([name, setter]) => {
             const q = query(collection(db, `artifacts/${appId}/users/${user.uid}/${name}`));
@@ -2016,6 +2037,44 @@ const AppLayout = ({ user, userProfile }) => {
                                          <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
                                          <td className="px-6 py-4">{item.role}</td>
                                          <td className="px-6 py-4">{item.commission}%</td>
+                                         <td className="px-6 py-4 text-center">
+                                             <div className="flex justify-center items-center gap-2">
+                                                 <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
+                                                 <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
+                                             </div>
+                                         </td>
+                                     </tr>
+                                 ))}
+                             </tbody>
+                         </table>
+                     )}
+                 />;
+            case 'suppliers':
+                 return <ManageGeneric
+                     collectionName="suppliers"
+                     title="Fornecedores"
+                     fields={[
+                         { name: 'name', label: 'Nome do Fornecedor', type: 'text', required: true },
+                         { name: 'phone', label: 'Telefone / WhatsApp', type: 'tel' },
+                         { name: 'email', label: 'Email', type: 'email' },
+                         { name: 'notes', label: 'Observações / Produtos', type: 'textarea' }
+                     ]}
+                      renderItem={(items, onEdit, onDelete) => (
+                         <table className="w-full text-sm text-left text-gray-500">
+                             <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                                 <tr>
+                                     <th scope="col" className="px-6 py-3">Nome</th>
+                                     <th scope="col" className="px-6 py-3">Telefone</th>
+                                     <th scope="col" className="px-6 py-3">Email</th>
+                                     <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                                 </tr>
+                             </thead>
+                             <tbody>
+                                 {items.map(item => (
+                                     <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
+                                         <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
+                                         <td className="px-6 py-4">{item.phone}</td>
+                                         <td className="px-6 py-4">{item.email}</td>
                                          <td className="px-6 py-4 text-center">
                                              <div className="flex justify-center items-center gap-2">
                                                  <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
@@ -2162,6 +2221,7 @@ const AppLayout = ({ user, userProfile }) => {
                             <NavItem icon={<LucideHammer />} label="Serviços" page="services" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideDollarSign />} label="Tabelas de Preços" page="price-tables" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideBoxes />} label="Estoque" page="inventory" activePage={activePage} setActivePage={setActivePage} />
+                            <NavItem icon={<LucideTruck />} label="Fornecedores" page="suppliers" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideBarChart3 />} label="Relatórios" page="reports" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideSettings />} label="Configurações" page="settings" activePage={activePage} setActivePage={setActivePage} />
                             {userProfile?.role === 'admin' && (
