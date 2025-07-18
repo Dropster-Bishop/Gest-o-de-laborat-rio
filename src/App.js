@@ -1359,11 +1359,11 @@ const PaymentForm = ({ onSubmit, payment }) => {
     );
 }
 
-const ReceiptModal = ({ order, companyProfile, onClose }) => {
+const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
     const receiptRef = useRef();
 
     const numberToWords = (num) => {
-        if (num === null || num === undefined) return '';
+        if (num === null || num === undefined) return 'zero reais';
         const a = ['','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','catorze','quinze','dezesseis','dezessete','dezoito','dezenove'];
         const b = ['', '', 'vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
         const c = ['', 'cem', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
@@ -1411,13 +1411,13 @@ const ReceiptModal = ({ order, companyProfile, onClose }) => {
                 pdf.autoPrint();
                 window.open(pdf.output('bloburl'), '_blank');
             } else {
-                pdf.save(`recibo_os_${order?.number || '000'}.pdf`);
+                pdf.save(`recibo_${receiptData?.receiptNumber}.pdf`);
             }
         });
     };
 
     return (
-        <Modal onClose={onClose} title={`Recibo - O.S. #${order?.number}`} size="4xl">
+        <Modal onClose={onClose} title={`Recibo - Cliente: ${receiptData?.clientName}`} size="4xl">
             <div className="p-2 bg-gray-200">
                 <div ref={receiptRef} className="bg-white p-8 border" style={{ width: '210mm', minHeight: '297mm', margin: 'auto' }}>
                     <header className="flex justify-between items-start pb-4 border-b">
@@ -1428,18 +1428,18 @@ const ReceiptModal = ({ order, companyProfile, onClose }) => {
                             <p className="text-sm text-gray-600">Tel: {companyProfile?.companyPhone || '(00) 00000-0000'}</p>
                         </div>
                         <div className="text-right">
-                            <h2 className="text-xl font-bold text-gray-700">RECIBO</h2>
-                            <p className="text-md font-semibold text-red-600">Nº {String(order?.number || 0).padStart(5, '0')}</p>
-                            <p className="text-xl font-bold mt-2">R$ {(order?.totalValue || 0).toFixed(2)}</p>
+                            <h2 className="text-xl font-bold text-gray-700">RECIBO DE PAGAMENTO</h2>
+                            <p className="text-md font-semibold">O.S. Nº: <span className="text-red-600">{receiptData?.receiptNumber}</span></p>
+                            <p className="text-xl font-bold mt-2">R$ {(receiptData?.totalValue || 0).toFixed(2)}</p>
                         </div>
                     </header>
 
                     <main className="mt-8">
                         <div className="mb-8">
                             <p className="text-md leading-relaxed">
-                                Recebemos de <strong className="font-bold">{order?.clientName || 'Cliente não informado'}</strong>, CNPJ/CPF nº <strong>{order?.client?.document || 'Não informado'}</strong>,
-                                a importância de <strong className="font-bold capitalize">{numberToWords(order?.totalValue || 0)}</strong>,
-                                referente aos serviços de prótese dentária detalhados abaixo, da Ordem de Serviço nº {String(order?.number || 0).padStart(5, '0')}.
+                                Recebemos de <strong className="font-bold">{receiptData?.clientName || 'Cliente não informado'}</strong>, CNPJ/CPF nº <strong>{receiptData?.clientDocument || 'Não informado'}</strong>,
+                                a importância de <strong className="font-bold capitalize">{numberToWords(receiptData?.totalValue)}</strong>,
+                                referente aos serviços de prótese dentária detalhados abaixo.
                             </p>
                         </div>
                         
@@ -1447,26 +1447,26 @@ const ReceiptModal = ({ order, companyProfile, onClose }) => {
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="text-left font-bold bg-gray-100">
-                                    <th className="p-2">Descrição do Serviço</th>
+                                    <th className="p-2">Descrição do Serviço (O.S. / Paciente)</th>
                                     <th className="p-2 text-center">Qtd.</th>
                                     <th className="p-2 text-right">Valor Unit.</th>
                                     <th className="p-2 text-right">Subtotal</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {(order?.services || []).map((service, index) => (
+                                {(receiptData?.orders || []).flatMap(order => order.services.map(service => ({...service, order}))).map((item, index) => (
                                     <tr key={index} className="border-b">
-                                        <td className="p-2">{service.name} (Paciente: {order.patientName})</td>
-                                        <td className="p-2 text-center">{service.quantity || 1}</td>
-                                        <td className="p-2 text-right">R$ {(service.price || 0).toFixed(2)}</td>
-                                        <td className="p-2 text-right">R$ {((service.price || 0) * (service.quantity || 1)).toFixed(2)}</td>
+                                        <td className="p-2">{item.name} (O.S. #{item.order.number} / {item.order.patientName})</td>
+                                        <td className="p-2 text-center">{item.quantity || 1}</td>
+                                        <td className="p-2 text-right">R$ {(item.price || 0).toFixed(2)}</td>
+                                        <td className="p-2 text-right">R$ {((item.price || 0) * (item.quantity || 1)).toFixed(2)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                             <tfoot>
                                 <tr className="font-bold">
                                     <td colSpan="3" className="p-2 text-right">VALOR TOTAL</td>
-                                    <td className="p-2 text-right">R$ {(order?.totalValue || 0).toFixed(2)}</td>
+                                    <td className="p-2 text-right">R$ {(receiptData?.totalValue || 0).toFixed(2)}</td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1496,7 +1496,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
     const [currentPayment, setCurrentPayment] = useState(null);
     const [expandedClient, setExpandedClient] = useState(null);
     const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
-    const [selectedOrderForReceipt, setSelectedOrderForReceipt] = useState(null);
+    const [dataForReceipt, setDataForReceipt] = useState(null);
 
     useEffect(() => {
         if (!userId) return;
@@ -1560,40 +1560,44 @@ const Financials = ({ userId, orders, companyProfile }) => {
         }
     };
 
-    const handleReceiveFromClient = async (ordersToPay) => {
-        if (!userId || !ordersToPay || ordersToPay.length === 0) return;
+    const handleReceiveFromClient = async (clientData) => {
+        if (!userId || !clientData.orders || clientData.orders.length === 0) return;
         
-        const clientName = ordersToPay[0]?.clientName || 'Cliente';
-        if (!window.confirm(`Confirma o recebimento de todas as O.S. pendentes para ${clientName}?`)) {
+        if (!window.confirm(`Confirma o recebimento de R$ ${clientData.totalDue.toFixed(2)} para ${clientData.clientName}?`)) {
             return;
         }
 
+        if (!companyProfile?.companyName) {
+            alert('Atenção: Os dados da sua empresa não estão preenchidos na aba "Configurações". O recibo pode sair incompleto.');
+        }
+
         const batch = writeBatch(db);
-        ordersToPay.forEach(order => {
+        clientData.orders.forEach(order => {
             const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, order.id);
             batch.update(docRef, { isPaid: true });
         });
         
         try {
             await batch.commit();
-            alert(`Recebimento do cliente ${clientName} registrado com sucesso.`);
+            alert(`Recebimento do cliente ${clientData.clientName} registrado com sucesso.`);
+
+            const receiptData = {
+                clientName: clientData.clientName,
+                clientDocument: clientData.orders[0]?.client?.document,
+                totalValue: clientData.totalDue,
+                orders: clientData.orders,
+                receiptNumber: clientData.orders.map(o => o.number).join(', ')
+            };
+            setDataForReceipt(receiptData);
+            setIsReceiptModalOpen(true);
         } catch (error) {
             console.error("Erro ao registrar recebimento em lote:", error);
             alert("Falha ao registrar o recebimento.");
         }
     };
 
-    const handleOpenReceiptModal = (order) => {
-        if (!companyProfile?.companyName) {
-            alert('Por favor, preencha os dados da sua empresa na aba "Configurações" antes de gerar um recibo.');
-            return;
-        }
-        setSelectedOrderForReceipt(order);
-        setIsReceiptModalOpen(true);
-    };
-
     const handleCloseReceiptModal = () => {
-        setSelectedOrderForReceipt(null);
+        setDataForReceipt(null);
         setIsReceiptModalOpen(false);
     };
 
@@ -1661,13 +1665,13 @@ const Financials = ({ userId, orders, companyProfile }) => {
                         <div>
                             <h3 className="text-xl font-bold text-gray-700 mb-4">Contas a Receber (por Cliente)</h3>
                             <div className="bg-white rounded-2xl shadow-md p-4 space-y-3">
-                                {Object.keys(unpaidByClient).length > 0 ? Object.values(unpaidByClient).map(client => (
-                                    <div key={client.clientName} className="flex justify-between items-center p-3 border rounded-lg hover:bg-gray-50">
+                                {Object.keys(unpaidByClient).length > 0 ? Object.values(unpaidByClient).map((client, idx) => (
+                                    <div key={idx} className="flex justify-between items-center p-3 border rounded-lg hover:bg-gray-50">
                                         <div>
                                             <p className="font-semibold text-gray-800">{client.clientName}</p>
                                             <p className="text-sm text-red-600">Total a receber: <span className="font-bold">R$ {client.totalDue.toFixed(2)}</span> ({client.orders.length} O.S.)</p>
                                         </div>
-                                        <Button onClick={() => handleReceiveFromClient(client.orders)}>Registrar Recebimento Total</Button>
+                                        <Button onClick={() => handleReceiveFromClient(client)}>Registrar Recebimento Total</Button>
                                     </div>
                                 )) : <p className="text-gray-500 text-center py-4">Nenhuma conta a receber pendente.</p>}
                             </div>
@@ -1676,8 +1680,8 @@ const Financials = ({ userId, orders, companyProfile }) => {
                          <div>
                              <h3 className="text-xl font-bold text-gray-700 mb-4">Histórico de Recebimentos (por Cliente)</h3>
                              <div className="bg-white rounded-2xl shadow-md p-4 space-y-1">
-                                 {Object.keys(paidByClient).length > 0 ? Object.values(paidByClient).sort((a,b) => a.clientName.localeCompare(b.clientName)).map(client => (
-                                    <div key={client.clientName} className="border rounded-lg overflow-hidden">
+                                 {Object.keys(paidByClient).length > 0 ? Object.values(paidByClient).sort((a,b) => a.clientName.localeCompare(b.clientName)).map((client, idx) => (
+                                    <div key={idx} className="border rounded-lg overflow-hidden">
                                         <button 
                                             onClick={() => setExpandedClient(expandedClient === client.clientName ? null : client.clientName)} 
                                             className="w-full flex justify-between items-center p-4 bg-gray-50 hover:bg-gray-100"
@@ -1697,9 +1701,6 @@ const Financials = ({ userId, orders, companyProfile }) => {
                                                             <p className="text-sm text-gray-500">Concluído em: {new Date(order.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
                                                          </div>
                                                          <div className="flex items-center gap-2">
-                                                             <Button onClick={() => handleOpenReceiptModal(order)} variant="secondary" className="p-2" title="Gerar Recibo">
-                                                                <LucideFileText size={16} />
-                                                             </Button>
                                                              <Button onClick={() => markOrderAsPaid(order, false)} variant="secondary" className="text-xs">Desfazer</Button>
                                                          </div>
                                                      </div>
@@ -1753,7 +1754,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
             )}
             {isReceiptModalOpen && (
                 <ReceiptModal 
-                    order={selectedOrderForReceipt} 
+                    receiptData={dataForReceipt} 
                     companyProfile={companyProfile}
                     onClose={handleCloseReceiptModal}
                 />
