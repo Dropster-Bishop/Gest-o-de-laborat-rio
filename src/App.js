@@ -726,7 +726,15 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         }
     };
 
-    const filteredOrders = orders.filter(order => filter === 'Todos' || order.status === filter);
+    const filteredOrders = orders.filter(order => {
+        const matchesStatus = filter === 'Todos' || order.status === filter;
+        const matchesSearch = searchTerm === '' || (
+            String(order.number).toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.patientName.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        return matchesStatus && matchesSearch;
+    });
 
     return (
         <div className="animate-fade-in">
@@ -744,6 +752,16 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                         <option>Concluído</option>
                         <option>Cancelado</option>
                     </select>
+                    <div className="relative w-full md:w-64">
+                        <LucideSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                        <Input
+                            type="text"
+                            placeholder="Buscar O.S., cliente ou paciente..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-10"
+                        />
+                    </div>
                     <Button onClick={() => handleOpenModal()}>
                         <LucidePlusCircle size={20} />
                         Nova O.S.
