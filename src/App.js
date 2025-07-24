@@ -597,6 +597,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [currentOrder, setCurrentOrder] = useState(null);
     const [filter, setFilter] = useState('Todos');
+    const [searchTerm, setSearchTerm] = useState(''); // NOVO ESTADO
     const printRef = useRef();
 
     const handleOpenModal = (order = null) => {
@@ -726,13 +727,31 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         }
     };
 
-    const filteredOrders = orders.filter(order => filter === 'Todos' || order.status === filter);
+    // LÓGICA DE FILTRAGEM ATUALIZADA
+    const filteredOrders = orders.filter(order => {
+        const matchesFilter = filter === 'Todos' || order.status === filter;
+        const matchesSearch = searchTerm === '' ||
+            order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.patientName.toLowerCase().includes(searchTerm.toLowerCase());
+        return matchesFilter && matchesSearch;
+    });
 
     return (
         <div className="animate-fade-in">
             <header className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <h1 className="text-3xl font-bold text-gray-800">Ordens de Serviço</h1>
-                <div className="w-full md:w-auto flex items-center gap-2">
+                <div className="w-full md:w-auto flex flex-col md:flex-row items-center gap-2">
+                    {/* CAMPO DE BUSCA ADICIONADO */}
+                    <div className="relative w-full md:w-64">
+                        <LucideSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                        <Input
+                            type="text"
+                            placeholder="Buscar por Cliente ou Paciente..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-10"
+                        />
+                    </div>
                     <select
                         value={filter}
                         onChange={(e) => setFilter(e.target.value)}
@@ -744,7 +763,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                         <option>Concluído</option>
                         <option>Cancelado</option>
                     </select>
-                    <Button onClick={() => handleOpenModal()}>
+                    <Button onClick={() => handleOpenModal()} className="w-full md:w-auto">
                         <LucidePlusCircle size={20} />
                         Nova O.S.
                     </Button>
