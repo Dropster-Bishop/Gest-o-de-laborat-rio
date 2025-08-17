@@ -1203,6 +1203,16 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
         };
     }).sort((a,b) => a.name.localeCompare(b.name));
 
+    // NOVO: Agrupa os serviços pelo campo 'material'
+    const groupedServices = combinedServices.reduce((acc, service) => {
+        const material = service.material || 'Outros'; // Agrupa serviços sem material em 'Outros'
+        if (!acc[material]) {
+            acc[material] = [];
+        }
+        acc[material].push(service);
+        return acc;
+    }, {});
+
     const generatePdf = (action = 'print') => {
         const input = printRef.current;
         if (!input || !window.html2canvas || !window.jspdf) {
@@ -1260,15 +1270,25 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
                             <th scope="col" className="px-6 py-3 text-right">Preço Customizado</th>
                         </tr>
                     </thead>
+                    {/* MODIFICADO: Itera sobre os grupos de materiais */}
                     <tbody>
-                        {combinedServices.map(service => (
-                            <tr key={service.id} className={`border-b ${service.customPrice ? 'bg-indigo-50' : 'bg-white'}`}>
-                                <td className="px-6 py-4 font-medium text-gray-900">{service.name}</td>
-                                <td className="px-6 py-4 text-right">R$ {service.price.toFixed(2)}</td>
-                                <td className="px-6 py-4 text-right font-bold text-indigo-700">
-                                    {service.customPrice ? `R$ ${service.customPrice.toFixed(2)}` : '-'}
-                                </td>
-                            </tr>
+                        {Object.keys(groupedServices).sort().map(material => (
+                            <React.Fragment key={material}>
+                                <tr className="bg-gray-200">
+                                    <th colSpan="3" className="px-6 py-2 text-left text-sm font-bold text-gray-700">
+                                        {material}
+                                    </th>
+                                </tr>
+                                {groupedServices[material].map(service => (
+                                    <tr key={service.id} className={`border-b ${service.customPrice ? 'bg-indigo-50' : 'bg-white'}`}>
+                                        <td className="px-6 py-4 font-medium text-gray-900">{service.name}</td>
+                                        <td className="px-6 py-4 text-right">R$ {service.price.toFixed(2)}</td>
+                                        <td className="px-6 py-4 text-right font-bold text-indigo-700">
+                                            {service.customPrice ? `R$ ${service.customPrice.toFixed(2)}` : '-'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>
