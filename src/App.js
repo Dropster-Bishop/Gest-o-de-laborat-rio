@@ -1191,9 +1191,103 @@ const PriceTableForm = ({ table, services, onSubmit, onCancel }) => {
     );
 };
 
-const PriceTables = ({ userId, services }) => {
+const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) => {
+    const printRef = useRef();
+
+    // Combina os preços da tabela com os serviços padrão para ter uma lista completa
+    const combinedServices = allServices.map(service => {
+        const customService = table.services?.find(s => s.serviceId === service.id);
+        return {
+            ...service,
+            customPrice: customService?.customPrice,
+        };
+    }).sort((a,b) => a.name.localeCompare(b.name));
+
+    const generatePdf = (action = 'print') => {
+        const input = printRef.current;
+        if (!input || !window.html2canvas || !window.jspdf) {
+            alert('Não foi possível gerar o PDF. Bibliotecas necessárias não encontradas.');
+            return;
+        }
+
+        window.html2canvas(input, { scale: 2, useCORS: true }).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+
+            const MARGIN = 15;
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const usableWidth = pdfWidth - (MARGIN * 2);
+
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            const aspectRatio = canvasHeight / canvasWidth;
+            const scaledHeight = usableWidth * aspectRatio;
+
+            pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledHeight);
+            
+            if (action === 'print') {
+                pdf.autoPrint();
+                window.open(pdf.output('bloburl'), '_blank');
+            } else {
+                pdf.save(`Tabela_${table.name.replace(/ /g, '_')}.pdf`);
+            }
+        }).catch(err => {
+            console.error("Error generating PDF:", err);
+            alert("Ocorreu um erro ao gerar o PDF.");
+        });
+    };
+    
+    return (
+        <Modal onClose={onClose} title={`Visualizar Tabela de Preços`} size="4xl">
+            <div ref={printRef} className="p-4 bg-white text-gray-800">
+                <header className="flex justify-between items-start pb-4 mb-6 border-b">
+                    <div>
+                        <h1 className="text-xl font-bold text-gray-800">{companyProfile?.companyName || 'Nome da Empresa'}</h1>
+                        <p className="text-sm text-gray-600">CNPJ: {companyProfile?.companyCnpj || '00.000.000/0000-00'}</p>
+                    </div>
+                    <div className="text-right">
+                        <h2 className="text-2xl font-bold text-indigo-600">{table.name}</h2>
+                        <p className="text-sm text-gray-500">Data de Emissão: {new Date().toLocaleDateString('pt-BR')}</p>
+                    </div>
+                </header>
+
+                <table className="w-full text-sm text-left text-gray-600">
+                    <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                        <tr>
+                            <th scope="col" className="px-6 py-3">Serviço</th>
+                            <th scope="col" className="px-6 py-3 text-right">Preço Padrão</th>
+                            <th scope="col" className="px-6 py-3 text-right">Preço Customizado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {combinedServices.map(service => (
+                            <tr key={service.id} className={`border-b ${service.customPrice ? 'bg-indigo-50' : 'bg-white'}`}>
+                                <td className="px-6 py-4 font-medium text-gray-900">{service.name}</td>
+                                <td className="px-6 py-4 text-right">R$ {service.price.toFixed(2)}</td>
+                                <td className="px-6 py-4 text-right font-bold text-indigo-700">
+                                    {service.customPrice ? `R$ ${service.customPrice.toFixed(2)}` : '-'}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                 <footer className="mt-8 text-center text-xs text-gray-500">
+                    <p>Este documento é uma representação da tabela de preços "{table.name}". Os preços padrão são a base, e os preços customizados se aplicam especificamente a esta tabela.</p>
+                </footer>
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t mt-4 p-4">
+                <Button onClick={() => generatePdf('save')} variant="secondary"><LucideFileDown size={18} /> Salvar PDF</Button>
+                <Button onClick={() => generatePdf('print')} variant="primary"><LucidePrinter size={18} /> Imprimir</Button>
+            </div>
+        </Modal>
+    );
+};
+
+const PriceTables = ({ userId, services, companyProfile }) => {
     const [tables, setTables] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [currentTable, setCurrentTable] = useState(null);
     const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/priceTables`);
 
@@ -1204,16 +1298,22 @@ const PriceTables = ({ userId, services }) => {
             setTables(data);
         });
         return () => unsubscribe();
-    }, [userId]);
+    }, [userId, collectionRef]);
 
     const handleOpenModal = (table = null) => {
         setCurrentTable(table);
         setIsModalOpen(true);
     };
 
+    const handleOpenViewModal = (table) => {
+        setCurrentTable(table);
+        setIsViewModalOpen(true);
+    };
+
     const handleCloseModal = () => {
         setCurrentTable(null);
         setIsModalOpen(false);
+        setIsViewModalOpen(false);
     };
 
     const handleSaveTable = async (tableData) => {
@@ -1265,8 +1365,9 @@ const PriceTables = ({ userId, services }) => {
                                 <td className="px-6 py-4">{table.services?.length || 0}</td>
                                 <td className="px-6 py-4 text-center">
                                     <div className="flex justify-center items-center gap-2">
-                                        <button onClick={() => handleOpenModal(table)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
-                                        <button onClick={() => handleDeleteTable(table.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
+                                        <button onClick={() => handleOpenViewModal(table)} title="Visualizar/Imprimir" className="text-indigo-600 hover:text-indigo-900 p-1"><LucideFileText size={18} /></button>
+                                        <button onClick={() => handleOpenModal(table)} title="Editar" className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
+                                        <button onClick={() => handleDeleteTable(table.id)} title="Excluir" className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
                                     </div>
                                 </td>
                             </tr>
@@ -1284,6 +1385,15 @@ const PriceTables = ({ userId, services }) => {
                 <Modal onClose={handleCloseModal} title={currentTable ? "Editar Tabela" : "Nova Tabela de Preços"} size="3xl">
                     <PriceTableForm table={currentTable} services={services} onSubmit={handleSaveTable} onCancel={handleCloseModal} />
                 </Modal>
+            )}
+
+            {isViewModalOpen && (
+                <PriceTableViewModal 
+                    table={currentTable} 
+                    allServices={services} 
+                    companyProfile={companyProfile}
+                    onClose={handleCloseModal} 
+                />
             )}
         </div>
     );
@@ -2189,7 +2299,7 @@ const AppLayout = ({ user, userProfile }) => {
                      )}
                  />;
             case 'price-tables':
-                return <PriceTables userId={user.uid} services={services} />;
+                return <PriceTables userId={user.uid} services={services} companyProfile={companyProfile} />;
             case 'service-orders':
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
             case 'financials':
