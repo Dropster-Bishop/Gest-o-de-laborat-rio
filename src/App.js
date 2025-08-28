@@ -28,7 +28,7 @@ import {
     LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch,
     LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock,
     LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle,
-    LucideChevronDown, LucideSettings, LucideFileText, LucideTruck
+    LucideChevronDown, LucideSettings, LucideFileText, LucideTruck, LucideArrowLeft
 } from 'lucide-react';
 
 // --- Configuração do Firebase ---
@@ -85,7 +85,7 @@ const Button = ({ children, onClick, variant = 'primary', className = '', type =
 const Spinner = () => (
     <div className="flex justify-center items-center h-screen bg-gray-100">
         <div className="text-center">
-            <svg className="animate-spin h-10 w-10 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin h-10 w-10 text-indigo-600 mx-auto" xmlns="http://www.w.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -342,7 +342,7 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
 
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
-    const [availableServices, setAvailableServices] = useState([]);
+    const [availableServices, setAvailableServices] = useState({});
     
     const initialServices = (order?.services || []).map(s => ({ ...s, quantity: s.quantity || 1 }));
     const [selectedServices, setSelectedServices] = useState(initialServices);
@@ -350,12 +350,13 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     const [totalValue, setTotalValue] = useState(0);
     const [commissionValue, setCommissionValue] = useState(0);
     const [selectedEmployeeId, setSelectedEmployeeId] = useState(order?.employeeId || '');
-    const [expandedMaterial, setExpandedMaterial] = useState(null); // NOVO ESTADO
+    const [selectedMaterial, setSelectedMaterial] = useState(null); // ESTADO PARA O MATERIAL SELECIONADO
     const formRef = useRef({});
 
     useEffect(() => {
         const client = clients.find(c => c.id === selectedClientId);
         const priceTableId = client?.priceTableId;
+        setSelectedMaterial(null); // Reseta a seleção de material ao trocar de cliente
 
         let servicesForClient;
 
@@ -378,7 +379,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             servicesForClient = services.map(s => ({ ...s, displayPrice: s.price }));
         }
         
-        // Agrupa os serviços por material
         const grouped = servicesForClient.reduce((acc, service) => {
             const material = service.material || 'Outros';
             if (!acc[material]) {
@@ -410,10 +410,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         }
 
     }, [selectedServices, selectedEmployeeId, employees]);
-    
-    const handleToggleMaterial = (material) => {
-        setExpandedMaterial(prev => (prev === material ? null : material));
-    };
 
     const handleServiceToggle = (service) => {
         const serviceWithDetails = {
@@ -533,37 +529,47 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
 
                 <div className="grid grid-cols-2 gap-6">
                     <div>
-                        <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Disponíveis</h3>
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-lg font-medium text-gray-800">
+                                {selectedMaterial ? `Serviços de ${selectedMaterial}` : 'Selecione o Material'}
+                            </h3>
+                            {selectedMaterial && (
+                                <Button onClick={() => setSelectedMaterial(null)} variant="secondary" className="py-1 px-2 text-xs">
+                                    <LucideArrowLeft size={14} /> Voltar
+                                </Button>
+                            )}
+                        </div>
+                        
                         {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-indigo-600 mb-2">A aplicar preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
-                        <div className="max-h-60 overflow-y-auto p-2 bg-gray-50 border rounded-lg space-y-1">
-                            {Object.keys(availableServices).sort().map(material => (
-                                <div key={material}>
+                        
+                        <div className="max-h-60 overflow-y-auto p-2 bg-gray-50 border rounded-lg space-y-2">
+                            {!selectedMaterial ? (
+                                // ETAPA 1: MOSTRAR LISTA DE MATERIAIS
+                                Object.keys(availableServices).sort().map(material => (
                                     <button
                                         type="button"
-                                        onClick={() => handleToggleMaterial(material)}
-                                        className="w-full flex justify-between items-center p-2 text-left font-semibold text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                                        key={material}
+                                        onClick={() => setSelectedMaterial(material)}
+                                        className="w-full text-left p-3 font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
                                     >
-                                        <span>{material}</span>
-                                        <LucideChevronDown className={`transition-transform ${expandedMaterial === material ? 'rotate-180' : ''}`} size={16} />
+                                        {material}
                                     </button>
-                                    {expandedMaterial === material && (
-                                        <div className="pl-2 pt-1">
-                                            {availableServices[material].map(service => (
-                                                <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-200 cursor-pointer transition-colors">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedServices.some(s => s.id === service.id)}
-                                                        onChange={() => handleServiceToggle(service)}
-                                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                                    />
-                                                    <span className="flex-1 text-sm text-gray-700">{service.name}</span>
-                                                    <span className={`text-sm font-semibold ${service.displayPrice !== service.price ? 'text-indigo-600' : 'text-gray-600'}`}>R$ {service.displayPrice?.toFixed(2)}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
+                                ))
+                            ) : (
+                                // ETAPA 2: MOSTRAR SERVIÇOS DO MATERIAL SELECIONADO
+                                availableServices[selectedMaterial]?.map(service => (
+                                    <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-200 cursor-pointer transition-colors">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedServices.some(s => s.id === service.id)}
+                                            onChange={() => handleServiceToggle(service)}
+                                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <span className="flex-1 text-sm text-gray-700">{service.name}</span>
+                                        <span className={`text-sm font-semibold ${service.displayPrice !== service.price ? 'text-indigo-600' : 'text-gray-600'}`}>R$ {service.displayPrice?.toFixed(2)}</span>
+                                    </label>
+                                ))
+                            )}
                         </div>
                     </div>
                     <div>
