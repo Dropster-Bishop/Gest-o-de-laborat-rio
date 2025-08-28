@@ -391,7 +391,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     }, [selectedClientId, clients, priceTables, services, order]);
 
     useEffect(() => {
-        const newTotal = selectedServices.reduce((sum, s) => sum + (s.price * (s.quantity || 1)), 0);
+        const newTotal = selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
         setTotalValue(newTotal);
 
         if (selectedEmployeeId) {
@@ -421,16 +421,15 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 : [...prev, serviceWithDetails]
         );
     };
-
+    
     const handleServiceDetailChange = (index, field, value) => {
-        const newServices = [...selectedServices];
-        let parsedValue = value;
-        if (field === 'quantity') {
-            parsedValue = parseInt(value, 10);
-            if (isNaN(parsedValue) || parsedValue < 1) parsedValue = 1;
-        }
-        newServices[index] = { ...newServices[index], [field]: parsedValue };
-        setSelectedServices(newServices);
+        const updatedServices = selectedServices.map((item, idx) => {
+            if (index === idx) {
+                return { ...item, [field]: value };
+            }
+            return item;
+        });
+        setSelectedServices(updatedServices);
     };
 
     const handleSubmit = async (e) => {
@@ -446,14 +445,26 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         }
 
         const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
+        
+        // Garante que a quantidade seja no mínimo 1 antes de salvar
+        const finalServices = selectedServices.map(s => ({
+            ...s,
+            quantity: Number(s.quantity) || 1,
+        }));
+        
+        const finalTotalValue = finalServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
+
         const orderData = {
             clientId: client.id, clientName: client.name, client: client,
             patientName: formRef.current.patientName.value,
             employeeId: employee.id, employeeName: employee.name, employee: employee,
             openDate: formRef.current.openDate.value, deliveryDate: formRef.current.deliveryDate.value,
             completionDate: formRef.current.completionDate.value || null, status: formRef.current.status.value,
-            services: selectedServices, totalValue, commissionPercentage: employee.commission,
-            commissionValue, observations: formRef.current.observations.value,
+            services: finalServices,
+            totalValue: finalTotalValue,
+            commissionPercentage: employee.commission,
+            commissionValue: finalTotalValue * (employee.commission / 100),
+            observations: formRef.current.observations.value,
             isPaid: order ? order.isPaid : false, updatedAt: serverTimestamp()
         };
 
@@ -472,6 +483,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             console.error("Error saving service order: ", error);
         }
     };
+    
+    const baseInputClasses = "w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200";
 
     return (
         <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
@@ -544,10 +557,16 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                             {selectedServices.map((service, index) => (
                                 <div key={index} className="grid grid-cols-12 gap-2 items-center">
                                     <span className="col-span-5 text-sm text-gray-800">{service.name}</span>
-                                    <Input type="text" placeholder="Dente" value={service.toothNumber} onChange={(e) => handleServiceDetailChange(index, 'toothNumber', e.target.value)} className="col-span-2" />
-                                    <Input type="text" placeholder="Cor" value={service.color} onChange={(e) => handleServiceDetailChange(index, 'color', e.target.value)} className="col-span-1" />
-                                    <Input type="number" placeholder="Qtd" value={service.quantity} onChange={(e) => handleServiceDetailChange(index, 'quantity', e.target.value)} className="col-span-1 text-center" />
-                                    <span className="col-span-2 text-sm text-right font-semibold text-gray-800">R$ {(service.price * service.quantity).toFixed(2)}</span>
+                                    <div className="col-span-2">
+                                        <input type="text" placeholder="Dente" value={service.toothNumber} onChange={(e) => handleServiceDetailChange(index, 'toothNumber', e.target.value)} className={baseInputClasses} />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <input type="text" placeholder="Cor" value={service.color} onChange={(e) => handleServiceDetailChange(index, 'color', e.target.value)} className={baseInputClasses} />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <input type="number" placeholder="Qtd" value={service.quantity} onChange={(e) => handleServiceDetailChange(index, 'quantity', e.target.value)} className={`${baseInputClasses} text-center`} />
+                                    </div>
+                                    <span className="col-span-2 text-sm text-right font-semibold text-gray-800">R$ {((service.price || 0) * (Number(service.quantity) || 1)).toFixed(2)}</span>
                                     <button type="button" onClick={() => handleServiceToggle(service)} className="text-red-500 hover:text-red-700 p-1 justify-self-center col-span-1"><LucideTrash2 size={16} /></button>
                                 </div>
                             ))}
@@ -587,6 +606,9 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         </Modal>
     );
 };
+
+// ... O restante do seu código (ServiceOrders, Reports, AppLayout, App, etc.) continua aqui ...
+// Apenas o componente OrderFormModal precisou ser substituído. O resto pode permanecer igual.
 
 const ServiceOrders = ({ userId, services, clients, employees, orders, priceTables }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
