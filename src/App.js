@@ -28,7 +28,7 @@ import {
     LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch,
     LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock,
     LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle,
-    LucideChevronDown, LucideSettings, LucideFileText, LucideTruck, LucideArrowLeft
+    LucideChevronDown, LucideSettings, LucideFileText, LucideTruck
 } from 'lucide-react';
 
 // --- Configuração do Firebase ---
@@ -85,7 +85,7 @@ const Button = ({ children, onClick, variant = 'primary', className = '', type =
 const Spinner = () => (
     <div className="flex justify-center items-center h-screen bg-gray-100">
         <div className="text-center">
-            <svg className="animate-spin h-10 w-10 text-indigo-600 mx-auto" xmlns="http://www.w.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin h-10 w-10 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -342,7 +342,7 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
 
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
-    const [availableServices, setAvailableServices] = useState({});
+    const [availableServices, setAvailableServices] = useState([]);
     
     const initialServices = (order?.services || []).map(s => ({ ...s, quantity: s.quantity || 1 }));
     const [selectedServices, setSelectedServices] = useState(initialServices);
@@ -350,20 +350,16 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     const [totalValue, setTotalValue] = useState(0);
     const [commissionValue, setCommissionValue] = useState(0);
     const [selectedEmployeeId, setSelectedEmployeeId] = useState(order?.employeeId || '');
-    const [selectedMaterial, setSelectedMaterial] = useState(null); // ESTADO PARA O MATERIAL SELECIONADO
     const formRef = useRef({});
 
     useEffect(() => {
         const client = clients.find(c => c.id === selectedClientId);
         const priceTableId = client?.priceTableId;
-        setSelectedMaterial(null); // Reseta a seleção de material ao trocar de cliente
-
-        let servicesForClient;
 
         if (priceTableId) {
             const table = priceTables.find(pt => pt.id === priceTableId);
             if (table && table.services) {
-                servicesForClient = table.services.map(tableService => {
+                const servicesForTable = table.services.map(tableService => {
                     const globalService = services.find(s => s.id === tableService.serviceId);
                     return {
                         ...globalService,
@@ -372,24 +368,14 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         displayPrice: tableService.customPrice,
                     };
                 }).filter(s => s.id);
+                setAvailableServices(servicesForTable);
             } else {
-                servicesForClient = services.map(s => ({ ...s, displayPrice: s.price }));
+                setAvailableServices(services.map(s => ({ ...s, displayPrice: s.price })));
             }
         } else {
-            servicesForClient = services.map(s => ({ ...s, displayPrice: s.price }));
+            setAvailableServices(services.map(s => ({ ...s, displayPrice: s.price })));
         }
         
-        const grouped = servicesForClient.reduce((acc, service) => {
-            const material = service.material || 'Outros';
-            if (!acc[material]) {
-                acc[material] = [];
-            }
-            acc[material].push(service);
-            return acc;
-        }, {});
-
-        setAvailableServices(grouped);
-
         if (!order) {
             setSelectedServices([]);
         }
@@ -529,47 +515,21 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
 
                 <div className="grid grid-cols-2 gap-6">
                     <div>
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-lg font-medium text-gray-800">
-                                {selectedMaterial ? `Serviços de ${selectedMaterial}` : 'Selecione o Material'}
-                            </h3>
-                            {selectedMaterial && (
-                                <Button onClick={() => setSelectedMaterial(null)} variant="secondary" className="py-1 px-2 text-xs">
-                                    <LucideArrowLeft size={14} /> Voltar
-                                </Button>
-                            )}
-                        </div>
-                        
+                        <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Disponíveis</h3>
                         {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-indigo-600 mb-2">A aplicar preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
-                        
-                        <div className="max-h-60 overflow-y-auto p-2 bg-gray-50 border rounded-lg space-y-2">
-                            {!selectedMaterial ? (
-                                // ETAPA 1: MOSTRAR LISTA DE MATERIAIS
-                                Object.keys(availableServices).sort().map(material => (
-                                    <button
-                                        type="button"
-                                        key={material}
-                                        onClick={() => setSelectedMaterial(material)}
-                                        className="w-full text-left p-3 font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
-                                    >
-                                        {material}
-                                    </button>
-                                ))
-                            ) : (
-                                // ETAPA 2: MOSTRAR SERVIÇOS DO MATERIAL SELECIONADO
-                                availableServices[selectedMaterial]?.map(service => (
-                                    <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-200 cursor-pointer transition-colors">
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedServices.some(s => s.id === service.id)}
-                                            onChange={() => handleServiceToggle(service)}
-                                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        <span className="flex-1 text-sm text-gray-700">{service.name}</span>
-                                        <span className={`text-sm font-semibold ${service.displayPrice !== service.price ? 'text-indigo-600' : 'text-gray-600'}`}>R$ {service.displayPrice?.toFixed(2)}</span>
-                                    </label>
-                                ))
-                            )}
+                        <div className="max-h-60 overflow-y-auto p-3 bg-gray-50 border rounded-lg">
+                            {availableServices.map(service => (
+                                <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-200 cursor-pointer transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedServices.some(s => s.id === service.id)}
+                                        onChange={() => handleServiceToggle(service)}
+                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span className="flex-1 text-sm text-gray-700">{service.name}</span>
+                                    <span className={`text-sm font-semibold ${service.displayPrice !== service.price ? 'text-indigo-600' : 'text-gray-600'}`}>R$ {service.displayPrice?.toFixed(2)}</span>
+                                </label>
+                            ))}
                         </div>
                     </div>
                     <div>
@@ -590,7 +550,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                     <span className="col-span-4 text-sm text-gray-800">{service.name}</span>
                                     <Input type="text" placeholder="Dente" value={service.toothNumber} onChange={(e) => handleServiceDetailChange(index, 'toothNumber', e.target.value)} className="col-span-2" />
                                     <Input type="text" placeholder="Cor" value={service.color} onChange={(e) => handleServiceDetailChange(index, 'color', e.target.value)} className="col-span-2" />
-                                    <Input type="number" placeholder="Qtd" value={service.quantity} onChange={(e) => handleServiceDetailChange(index, 'quantity', e.target.value)} className="col-span-1 text-center" />
+                                    <Input type="number" placeholder="Qtd" value={service.quantity} onChange={(e) => handleServiceDetailChange(index, 'quantity', e.target.value)} className="col-span-1 text-center" min="1" />
                                     <span className="col-span-2 text-sm text-right font-semibold text-gray-800">R$ {(service.price * service.quantity).toFixed(2)}</span>
                                     <button type="button" onClick={() => handleServiceToggle(service)} className="text-red-500 hover:text-red-700 p-1 justify-self-center col-span-1"><LucideTrash2 size={16} /></button>
                                 </div>
@@ -938,14 +898,17 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
     );
 };
 
-const Reports = ({ orders, employees, clients }) => {
+const Reports = ({ orders, employees, clients, services }) => {
     const [reportType, setReportType] = useState('completedByPeriod');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [selectedEmployee, setSelectedEmployee] = useState('');
     const [selectedClient, setSelectedClient] = useState('');
+    const [selectedMaterial, setSelectedMaterial] = useState('');
     const [results, setResults] = useState([]);
     const reportPrintRef = useRef();
+
+    const materials = [...new Set((services || []).map(s => s.material).filter(Boolean))].sort();
 
     const reportTitles = {
         completedByPeriod: 'Relatório de Serviços Concluídos',
@@ -955,6 +918,8 @@ const Reports = ({ orders, employees, clients }) => {
 
     const handleGenerateReport = () => {
         let data = [];
+        const serviceMaterialMap = new Map((services || []).map(s => [s.id, s.material]));
+
         if (reportType === 'completedByPeriod') {
             data = orders.filter(o => {
                 const completed = o.status === 'Concluído' && o.completionDate;
@@ -967,6 +932,13 @@ const Reports = ({ orders, employees, clients }) => {
                 if (end && completionDate > end) return false;
                 return true;
             });
+
+            if (selectedMaterial) {
+                data = data.filter(order =>
+                    order.services.some(s => serviceMaterialMap.get(s.id) === selectedMaterial)
+                );
+            }
+
         } else if (reportType === 'commissionsByEmployee') {
             data = orders.filter(o => {
                 if(selectedEmployee === '') return false;
@@ -1069,6 +1041,9 @@ const Reports = ({ orders, employees, clients }) => {
             const clientName = clients.find(c => c.id === selectedClient)?.name || '';
             return `Cliente: ${clientName} | ${period}`;
         }
+        if (reportType === 'completedByPeriod' && selectedMaterial) {
+            return `Material: ${selectedMaterial} | ${period}`;
+        }
         return period;
     };
 
@@ -1080,12 +1055,21 @@ const Reports = ({ orders, employees, clients }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
                     <div>
                         <label htmlFor="reportType" className="block text-sm font-medium text-gray-700 mb-1">Tipo de Relatório</label>
-                        <select id="reportType" value={reportType} onChange={e => {setReportType(e.target.value); setResults([]);}} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                        <select id="reportType" value={reportType} onChange={e => {setReportType(e.target.value); setResults([]); setSelectedMaterial('');}} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
                             <option value="completedByPeriod">Serviços Concluídos</option>
                             <option value="commissionsByEmployee">Comissões por Funcionário</option>
                             <option value="ordersByClient">Ordens por Cliente</option>
                         </select>
                     </div>
+                     {reportType === 'completedByPeriod' && (
+                         <div>
+                             <label htmlFor="material" className="block text-sm font-medium text-gray-700 mb-1">Material</label>
+                             <select id="material" value={selectedMaterial} onChange={e => setSelectedMaterial(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                                 <option value="">Todos</option>
+                                 {materials.map(material => <option key={material} value={material}>{material}</option>)}
+                             </select>
+                         </div>
+                     )}
                      {reportType === 'commissionsByEmployee' && (
                          <div>
                              <label htmlFor="employee" className="block text-sm font-medium text-gray-700 mb-1">Funcionário</label>
@@ -2277,15 +2261,6 @@ const AppLayout = ({ user, userProfile }) => {
                      )}
                  />;
             case 'services':
-                 const groupedServices = services.reduce((acc, service) => {
-                    const material = service.material || 'Sem Material';
-                    if (!acc[material]) {
-                        acc[material] = [];
-                    }
-                    acc[material].push(service);
-                    return acc;
-                }, {});
-
                  return <ManageGeneric
                      collectionName="services"
                      title="Serviços (Preços Padrão)"
@@ -2296,29 +2271,31 @@ const AppLayout = ({ user, userProfile }) => {
                          { name: 'description', label: 'Descrição', type: 'textarea' },
                      ]}
                      renderItem={(items, onEdit, onDelete) => (
-                          <div className="space-y-4 p-4">
-                            {Object.keys(groupedServices).sort().map(material => (
-                                <div key={material} className="bg-white rounded-lg shadow-md border border-gray-200">
-                                    <h3 className="px-6 py-3 text-lg font-bold text-gray-700 bg-gray-100 rounded-t-lg">{material}</h3>
-                                    <table className="w-full text-sm text-left text-gray-500">
-                                      <tbody>
-                                        {groupedServices[material].map(item => (
-                                            <tr key={item.id} className="border-b last:border-b-0 hover:bg-gray-50">
-                                                <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
-                                                <td className="px-6 py-4 text-right font-semibold">R$ {item.price?.toFixed(2)}</td>
-                                                <td className="px-6 py-4 text-center w-32">
-                                                    <div className="flex justify-center items-center gap-2">
-                                                        <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
-                                                        <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                </div>
-                            ))}
-                          </div>
+                          <table className="w-full text-sm text-left text-gray-500">
+                              <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                                  <tr>
+                                      <th scope="col" className="px-6 py-3">Serviço</th>
+                                      <th scope="col" className="px-6 py-3">Material</th>
+                                      <th scope="col" className="px-6 py-3 text-right">Preço Padrão</th>
+                                      <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                                  </tr>
+                              </thead>
+                              <tbody>
+                                  {items.map(item => (
+                                      <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
+                                          <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
+                                          <td className="px-6 py-4">{item.material}</td>
+                                          <td className="px-6 py-4 text-right font-semibold">R$ {item.price?.toFixed(2)}</td>
+                                          <td className="px-6 py-4 text-center">
+                                              <div className="flex justify-center items-center gap-2">
+                                                  <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
+                                                  <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
+                                              </div>
+                                          </td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
                       )}
                  />;
             case 'inventory':
@@ -2372,7 +2349,7 @@ const AppLayout = ({ user, userProfile }) => {
             case 'financials':
                 return <Financials userId={user.uid} orders={serviceOrders} companyProfile={companyProfile} />;
             case 'reports':
-                return <Reports orders={serviceOrders} employees={employees} clients={clients} />;
+                return <Reports orders={serviceOrders} employees={employees} clients={clients} services={services} />;
             case 'user-management':
                 return <UserManagement userId={user.uid} />;
             case 'settings':
