@@ -529,12 +529,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         </div>
                     </div>
                     <div>
-                        <div className="flex items-center gap-3 mb-2">
-                             <h3 className="text-lg font-medium text-gray-800">Serviços Selecionados</h3>
-                             {selectedServices.length > 0 && (
-                                <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-2.5 py-1 rounded-full">{selectedServices.length}</span>
-                             )}
-                        </div>
+                        <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Selecionados</h3>
                         <div className="max-h-60 overflow-y-auto p-3 bg-white border rounded-lg space-y-2">
                              {selectedServices.length > 0 && (
                                 <div className="grid grid-cols-12 gap-2 text-xs font-bold text-gray-500 mb-2 px-1">
@@ -547,7 +542,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                 </div>
                              )}
                             {selectedServices.map((service, index) => (
-                                <div key={service.id} className="grid grid-cols-12 gap-2 items-center">
+                                <div key={index} className="grid grid-cols-12 gap-2 items-center">
                                     <span className="col-span-5 text-sm text-gray-800">{service.name}</span>
                                     <Input type="text" placeholder="Dente" value={service.toothNumber} onChange={(e) => handleServiceDetailChange(index, 'toothNumber', e.target.value)} className="col-span-2" />
                                     <Input type="text" placeholder="Cor" value={service.color} onChange={(e) => handleServiceDetailChange(index, 'color', e.target.value)} className="col-span-1" />
