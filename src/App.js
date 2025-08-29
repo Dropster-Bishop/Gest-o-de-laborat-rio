@@ -345,8 +345,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState({});
     
-    // --- [LÓGICA REFEITA 1/4] ---
-    // Normaliza os dados iniciais para garantir que todos os campos tenham um valor padrão.
     const getInitialServices = () => {
         if (!order || !order.services) return [];
         return order.services.map(s => ({
@@ -358,7 +356,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     };
 
     const [selectedServices, setSelectedServices] = useState(getInitialServices);
-    const [editingService, setEditingService] = useState(null); // Guarda o serviço a ser editado { index, data }
+    const [editingService, setEditingService] = useState(null); 
     const [totalValue, setTotalValue] = useState(0);
     const [commissionValue, setCommissionValue] = useState(0);
     const [selectedEmployeeId, setSelectedEmployeeId] = useState(order?.employeeId || '');
@@ -419,8 +417,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         );
     };
     
-    // --- [LÓGICA REFEITA 2/4] ---
-    // Funções para controlar o formulário de edição de um serviço
     const handleEditChange = (field, value) => {
         setEditingService(current => ({ ...current, data: { ...current.data, [field]: value } }));
     };
@@ -432,7 +428,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 idx === editingService.index ? editingService.data : item
             )
         );
-        setEditingService(null); // Fecha o formulário de edição
+        setEditingService(null); 
     };
     
     const handleSubmit = async (e) => {
@@ -476,12 +472,9 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         } catch (error) { console.error("Error saving service order: ", error); }
     };
     
-    const baseInputClasses = "w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200";
-
     return (
         <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
             <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Parte superior do formulário (Cliente, Paciente, Datas) - Sem alterações */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      <div className="space-y-4">
                         <div>
@@ -509,7 +502,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 </div>
 
                 <div className="grid grid-cols-2 gap-6">
-                    {/* Coluna da Esquerda (Serviços Disponíveis) - Sem alterações */}
                     <div>
                         <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Disponíveis</h3>
                         {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-indigo-600 mb-2">A aplicar preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
@@ -533,25 +525,41 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                             )}
                         </div>
                     </div>
-
-                    {/* --- [LÓGICA REFEITA 3/4] --- */}
-                    {/* Coluna da Direita (Serviços Selecionados e Formulário de Edição) */}
+                    
                     <div>
                         <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Selecionados</h3>
-                        <div className="max-h-60 overflow-y-auto p-1 bg-white border rounded-lg space-y-1">
+                        <div className="max-h-60 overflow-y-auto p-1 bg-white border rounded-lg">
                             {selectedServices.length > 0 ? (
                                 selectedServices.map((service, index) => (
-                                    <div key={service.id} className="grid grid-cols-12 gap-2 items-center p-2 rounded-md hover:bg-gray-50">
-                                        <span className="col-span-6 font-medium text-sm text-gray-800">{service.name}</span>
-                                        <span className="col-span-2 text-sm text-gray-600">D: {service.toothNumber || '-'}</span>
-                                        <span className="col-span-2 text-sm text-gray-600">C: {service.color || '-'}</span>
-                                        <span className="col-span-2 text-sm text-gray-600 text-right">Q: {service.quantity || '1'}</span>
-                                        <div className="col-span-12 flex justify-end items-center gap-2 mt-1">
-                                            <span className="text-sm font-semibold text-gray-800">
-                                                Subtotal: R$ {((service.price || 0) * (Number(service.quantity) || 1)).toFixed(2)}
+                                    // --- [LAYOUT NOVO E CORRIGIDO] ---
+                                    <div key={service.id} className="p-2 rounded-md hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-medium text-sm text-gray-800 truncate pr-2">{service.name}</span>
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                <button type="button" onClick={() => setEditingService({ index, data: service })} className="p-1 text-blue-600 hover:text-blue-800" title="Editar serviço">
+                                                    <LucideEdit size={16}/>
+                                                </button>
+                                                <button type="button" onClick={() => handleServiceToggle(service)} className="p-1 text-red-500 hover:text-red-700" title="Remover serviço">
+                                                    <LucideTrash2 size={16}/>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-gray-600">
+                                            <span className="flex items-center gap-1 min-w-0">
+                                                <strong>D:</strong>
+                                                <span className="truncate">{service.toothNumber || '-'}</span>
                                             </span>
-                                            <button type="button" onClick={() => setEditingService({ index, data: service })} className="p-1 text-blue-600 hover:text-blue-800"><LucideEdit size={16}/></button>
-                                            <button type="button" onClick={() => handleServiceToggle(service)} className="p-1 text-red-500 hover:text-red-700"><LucideTrash2 size={16}/></button>
+                                            <span className="flex items-center gap-1">
+                                                <strong>C:</strong>
+                                                <span>{service.color || '-'}</span>
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                                <strong>Q:</strong>
+                                                <span>{service.quantity || '1'}</span>
+                                            </span>
+                                            <span className="font-semibold text-gray-800 ml-auto">
+                                                R$ {((service.price || 0) * (Number(service.quantity) || 1)).toFixed(2)}
+                                            </span>
                                         </div>
                                     </div>
                                 ))
@@ -560,10 +568,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                             )}
                         </div>
                         
-                        {/* --- [LÓGICA REFEITA 4/4] --- */}
-                        {/* Formulário de Edição que aparece quando um item é selecionado */}
                         {editingService && (
-                            <div className="mt-4 p-4 bg-indigo-50 border-t-2 border-indigo-200 rounded-b-lg">
+                            <div className="mt-2 p-4 bg-indigo-50 border-t-2 border-indigo-200 rounded-lg">
                                 <h4 className="text-md font-bold text-indigo-800 mb-3">Editando: {editingService.data.name}</h4>
                                 <div className="grid grid-cols-3 gap-3 items-end">
                                     <Input label="Nº Dente" value={editingService.data.toothNumber} onChange={e => handleEditChange('toothNumber', e.target.value)} />
@@ -579,7 +585,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     </div>
                 </div>
                 
-                {/* Parte inferior do formulário (Status, Observações, Total) - Sem alterações */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -609,6 +614,9 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     );
 };
 
+// ... O restante do seu arquivo (ServiceOrders, Reports, AppLayout, App, etc.) continua daqui, sem alterações ...
+// ...
+// ...
 
 const ServiceOrders = ({ userId, services, clients, employees, orders, priceTables }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -913,11 +921,8 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         </div>
     );
 };
-
-// --- O restante do arquivo (Reports, PriceTables, etc.) continua aqui sem alterações ---
-// --- Cole o restante do seu arquivo original a partir daqui ---
-// O código abaixo é idêntico ao original e está incluído para garantir que o arquivo esteja completo.
-
+// --- Copie e cole o restante do seu arquivo App.js aqui (Reports, PriceTables, Financials, etc.) ---
+// --- O código restante não foi alterado e pode ser copiado do seu arquivo original. ---
 const Reports = ({ orders, employees, clients }) => {
     const [reportType, setReportType] = useState('completedByPeriod');
     const [startDate, setStartDate] = useState('');
