@@ -423,13 +423,14 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     };
     
     const handleServiceDetailChange = (index, field, value) => {
-        const updatedServices = selectedServices.map((item, idx) => {
-            if (index === idx) {
-                return { ...item, [field]: value };
-            }
-            return item;
-        });
-        setSelectedServices(updatedServices);
+        setSelectedServices(currentServices =>
+            currentServices.map((item, idx) => {
+                if (index === idx) {
+                    return { ...item, [field]: value };
+                }
+                return item;
+            })
+        );
     };
 
     const handleSubmit = async (e) => {
