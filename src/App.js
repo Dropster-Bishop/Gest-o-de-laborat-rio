@@ -340,10 +340,9 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
     );
 };
 
-// --- [NOVO COMPONENTE] ---
+// --- [COMPONENTE REFEITO] ---
 // Componente para renderizar cada linha da lista de serviços selecionados
 const SelectedServiceItem = React.memo(({ service, index, onUpdate, onRemove, baseInputClasses }) => {
-    // Handler genérico para atualizar qualquer campo do serviço
     const handleChange = (field, value) => {
         const updatedService = { ...service, [field]: value };
         onUpdate(index, updatedService);
@@ -356,7 +355,7 @@ const SelectedServiceItem = React.memo(({ service, index, onUpdate, onRemove, ba
                 <input
                     type="text"
                     placeholder="Dente"
-                    value={service.toothNumber || ''}
+                    value={service.toothNumber}
                     onChange={(e) => handleChange('toothNumber', e.target.value)}
                     className={baseInputClasses}
                 />
@@ -365,7 +364,7 @@ const SelectedServiceItem = React.memo(({ service, index, onUpdate, onRemove, ba
                 <input
                     type="text"
                     placeholder="Cor"
-                    value={service.color || ''}
+                    value={service.color}
                     onChange={(e) => handleChange('color', e.target.value)}
                     className={baseInputClasses}
                 />
@@ -374,7 +373,7 @@ const SelectedServiceItem = React.memo(({ service, index, onUpdate, onRemove, ba
                 <input
                     type="number"
                     placeholder="Qtd"
-                    value={service.quantity || 1}
+                    value={service.quantity}
                     onChange={(e) => handleChange('quantity', e.target.value)}
                     className={`${baseInputClasses} text-center`}
                     min="1"
@@ -398,8 +397,20 @@ const SelectedServiceItem = React.memo(({ service, index, onUpdate, onRemove, ba
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState({});
-    const initialServices = (order?.services || []).map(s => ({ ...s, quantity: s.quantity || 1 }));
-    const [selectedServices, setSelectedServices] = useState(initialServices);
+    
+    // --- [LÓGICA CORRIGIDA] ---
+    // Garante que os serviços iniciais tenham todos os campos necessários com valores padrão.
+    const getInitialServices = () => {
+        if (!order || !order.services) return [];
+        return order.services.map(s => ({
+            ...s,
+            toothNumber: s.toothNumber || '',
+            color: s.color || '',
+            quantity: s.quantity || 1,
+        }));
+    };
+
+    const [selectedServices, setSelectedServices] = useState(getInitialServices);
     const [totalValue, setTotalValue] = useState(0);
     const [commissionValue, setCommissionValue] = useState(0);
     const [selectedEmployeeId, setSelectedEmployeeId] = useState(order?.employeeId || '');
@@ -461,6 +472,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     }, [selectedServices, selectedEmployeeId, employees]);
 
     const handleServiceToggle = (service) => {
+        // --- [LÓGICA CORRIGIDA] ---
+        // Garante que um novo serviço sempre tenha valores padrão para os inputs.
         const serviceWithDetails = {
             id: service.id,
             name: service.name,
@@ -477,8 +490,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         );
     };
     
-    // --- [NOVA FUNÇÃO] ---
-    // Atualiza um serviço específico na lista de selecionados
+    // --- [NOVA FUNÇÃO DE ATUALIZAÇÃO] ---
     const handleUpdateService = (index, updatedService) => {
         setSelectedServices(currentServices =>
             currentServices.map((item, idx) =>
@@ -501,7 +513,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
 
         const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
         
-        // Garante que a quantidade seja no mínimo 1 antes de salvar
         const finalServices = selectedServices.map(s => ({
             ...s,
             quantity: Number(s.quantity) || 1,
@@ -657,8 +668,9 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     );
 };
 
-// ... O restante do seu código (ServiceOrders, Reports, AppLayout, App, etc.) continua aqui ...
-// O resto do arquivo permanece o mesmo, a mudança crucial foi feita acima.
+// ... O restante do seu arquivo continua daqui para baixo sem alterações ...
+// ...
+// ...
 
 const ServiceOrders = ({ userId, services, clients, employees, orders, priceTables }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
