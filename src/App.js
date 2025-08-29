@@ -555,7 +555,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                 </div>
                              )}
                             {selectedServices.map((service, index) => (
-                                <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                                <div key={service.id} className="grid grid-cols-12 gap-2 items-center">
                                     <span className="col-span-5 text-sm text-gray-800">{service.name}</span>
                                     <div className="col-span-2">
                                         <input type="text" placeholder="Dente" value={service.toothNumber} onChange={(e) => handleServiceDetailChange(index, 'toothNumber', e.target.value)} className={baseInputClasses} />
