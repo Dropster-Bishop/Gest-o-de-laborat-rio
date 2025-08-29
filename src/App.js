@@ -340,66 +340,13 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
     );
 };
 
-// --- [COMPONENTE REFEITO] ---
-// Componente para renderizar cada linha da lista de serviços selecionados
-const SelectedServiceItem = React.memo(({ service, index, onUpdate, onRemove, baseInputClasses }) => {
-    const handleChange = (field, value) => {
-        const updatedService = { ...service, [field]: value };
-        onUpdate(index, updatedService);
-    };
-
-    return (
-        <div className="grid grid-cols-12 gap-2 items-center">
-            <span className="col-span-5 text-sm text-gray-800">{service.name}</span>
-            <div className="col-span-2">
-                <input
-                    type="text"
-                    placeholder="Dente"
-                    value={service.toothNumber}
-                    onChange={(e) => handleChange('toothNumber', e.target.value)}
-                    className={baseInputClasses}
-                />
-            </div>
-            <div className="col-span-1">
-                <input
-                    type="text"
-                    placeholder="Cor"
-                    value={service.color}
-                    onChange={(e) => handleChange('color', e.target.value)}
-                    className={baseInputClasses}
-                />
-            </div>
-            <div className="col-span-1">
-                <input
-                    type="number"
-                    placeholder="Qtd"
-                    value={service.quantity}
-                    onChange={(e) => handleChange('quantity', e.target.value)}
-                    className={`${baseInputClasses} text-center`}
-                    min="1"
-                />
-            </div>
-            <span className="col-span-2 text-sm text-right font-semibold text-gray-800">
-                R$ {((service.price || 0) * (Number(service.quantity) || 1)).toFixed(2)}
-            </span>
-            <button
-                type="button"
-                onClick={() => onRemove(service)}
-                className="text-red-500 hover:text-red-700 p-1 justify-self-center col-span-1"
-            >
-                <LucideTrash2 size={16} />
-            </button>
-        </div>
-    );
-});
-
 
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState({});
     
-    // --- [LÓGICA CORRIGIDA] ---
-    // Garante que os serviços iniciais tenham todos os campos necessários com valores padrão.
+    // --- [LÓGICA REFEITA 1/4] ---
+    // Normaliza os dados iniciais para garantir que todos os campos tenham um valor padrão.
     const getInitialServices = () => {
         if (!order || !order.services) return [];
         return order.services.map(s => ({
@@ -411,6 +358,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     };
 
     const [selectedServices, setSelectedServices] = useState(getInitialServices);
+    const [editingService, setEditingService] = useState(null); // Guarda o serviço a ser editado { index, data }
     const [totalValue, setTotalValue] = useState(0);
     const [commissionValue, setCommissionValue] = useState(0);
     const [selectedEmployeeId, setSelectedEmployeeId] = useState(order?.employeeId || '');
@@ -428,19 +376,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             if (table && table.services) {
                 servicesForClient = table.services.map(tableService => {
                     const globalService = services.find(s => s.id === tableService.serviceId);
-                    return {
-                        ...globalService,
-                        id: tableService.serviceId,
-                        name: tableService.serviceName,
-                        displayPrice: tableService.customPrice,
-                    };
+                    return { ...globalService, id: tableService.serviceId, name: tableService.serviceName, displayPrice: tableService.customPrice, };
                 }).filter(s => s.id);
-            } else {
-                servicesForClient = services.map(s => ({ ...s, displayPrice: s.price }));
-            }
-        } else {
-            servicesForClient = services.map(s => ({ ...s, displayPrice: s.price }));
-        }
+            } else { servicesForClient = services.map(s => ({ ...s, displayPrice: s.price })); }
+        } else { servicesForClient = services.map(s => ({ ...s, displayPrice: s.price })); }
         
         const grouped = servicesForClient.reduce((acc, service) => {
             const material = service.material || 'Outros';
@@ -451,9 +390,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
 
         setAvailableServices(grouped);
 
-        if (!order) {
-            setSelectedServices([]);
-        }
+        if (!order) { setSelectedServices([]); }
     }, [selectedClientId, clients, priceTables, services, order]);
 
     useEffect(() => {
@@ -466,21 +403,13 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 const commission = (newTotal * (employee.commission / 100));
                 setCommissionValue(commission);
             }
-        } else {
-            setCommissionValue(0);
-        }
+        } else { setCommissionValue(0); }
     }, [selectedServices, selectedEmployeeId, employees]);
 
     const handleServiceToggle = (service) => {
-        // --- [LÓGICA CORRIGIDA] ---
-        // Garante que um novo serviço sempre tenha valores padrão para os inputs.
         const serviceWithDetails = {
-            id: service.id,
-            name: service.name,
-            price: service.displayPrice,
-            toothNumber: '',
-            color: '',
-            quantity: 1
+            id: service.id, name: service.name, price: service.displayPrice,
+            toothNumber: '', color: '', quantity: 1
         };
 
         setSelectedServices(prev =>
@@ -490,15 +419,22 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         );
     };
     
-    // --- [NOVA FUNÇÃO DE ATUALIZAÇÃO] ---
-    const handleUpdateService = (index, updatedService) => {
-        setSelectedServices(currentServices =>
-            currentServices.map((item, idx) =>
-                idx === index ? updatedService : item
-            )
-        );
+    // --- [LÓGICA REFEITA 2/4] ---
+    // Funções para controlar o formulário de edição de um serviço
+    const handleEditChange = (field, value) => {
+        setEditingService(current => ({ ...current, data: { ...current.data, [field]: value } }));
     };
 
+    const handleUpdateService = () => {
+        if (!editingService) return;
+        setSelectedServices(currentServices =>
+            currentServices.map((item, idx) =>
+                idx === editingService.index ? editingService.data : item
+            )
+        );
+        setEditingService(null); // Fecha o formulário de edição
+    };
+    
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!userId) return;
@@ -506,18 +442,11 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         const employee = employees.find(emp => emp.id === selectedEmployeeId);
         const client = clients.find(c => c.id === selectedClientId);
 
-        if (!client || !employee) {
-            alert('Cliente e Funcionário são obrigatórios.');
-            return;
-        }
+        if (!client || !employee) { alert('Cliente e Funcionário são obrigatórios.'); return; }
 
         const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
         
-        const finalServices = selectedServices.map(s => ({
-            ...s,
-            quantity: Number(s.quantity) || 1,
-        }));
-        
+        const finalServices = selectedServices.map(s => ({ ...s, quantity: Number(s.quantity) || 1, }));
         const finalTotalValue = finalServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
 
         const orderData = {
@@ -526,8 +455,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             employeeId: employee.id, employeeName: employee.name, employee: employee,
             openDate: formRef.current.openDate.value, deliveryDate: formRef.current.deliveryDate.value,
             completionDate: formRef.current.completionDate.value || null, status: formRef.current.status.value,
-            services: finalServices,
-            totalValue: finalTotalValue,
+            services: finalServices, totalValue: finalTotalValue,
             commissionPercentage: employee.commission,
             commissionValue: finalTotalValue * (employee.commission / 100),
             observations: formRef.current.observations.value,
@@ -545,9 +473,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 await addDoc(collectionRef, orderData);
             }
             onClose();
-        } catch (error) {
-            console.error("Error saving service order: ", error);
-        }
+        } catch (error) { console.error("Error saving service order: ", error); }
     };
     
     const baseInputClasses = "w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200";
@@ -555,6 +481,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     return (
         <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
             <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Parte superior do formulário (Cliente, Paciente, Datas) - Sem alterações */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      <div className="space-y-4">
                         <div>
@@ -582,6 +509,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 </div>
 
                 <div className="grid grid-cols-2 gap-6">
+                    {/* Coluna da Esquerda (Serviços Disponíveis) - Sem alterações */}
                     <div>
                         <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Disponíveis</h3>
                         {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-indigo-600 mb-2">A aplicar preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
@@ -589,9 +517,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         <div className="space-y-3">
                             <select value={selectedMaterial} onChange={e => setSelectedMaterial(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
                                 <option value="">Selecione um material...</option>
-                                {Object.keys(availableServices).sort().map(material => (
-                                    <option key={material} value={material}>{material}</option>
-                                ))}
+                                {Object.keys(availableServices).sort().map(material => ( <option key={material} value={material}>{material}</option> ))}
                             </select>
 
                             {selectedMaterial && (
@@ -607,35 +533,53 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                             )}
                         </div>
                     </div>
+
+                    {/* --- [LÓGICA REFEITA 3/4] --- */}
+                    {/* Coluna da Direita (Serviços Selecionados e Formulário de Edição) */}
                     <div>
                         <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Selecionados</h3>
-                        <div className="max-h-60 overflow-y-auto p-3 bg-white border rounded-lg space-y-2">
-                             {selectedServices.length > 0 && (
-                                <div className="grid grid-cols-12 gap-2 text-xs font-bold text-gray-500 mb-2 px-1">
-                                    <span className="col-span-5">Serviço</span>
-                                    <span className="col-span-2">Dente</span>
-                                    <span className="col-span-1">Cor</span>
-                                    <span className="col-span-1 text-center">Qtd</span>
-                                    <span className="col-span-2 text-right">Subtotal</span>
-                                    <span className="col-span-1"></span>
-                                </div>
-                             )}
-                            {/* --- [ÁREA MODIFICADA] --- */}
-                            {selectedServices.map((service, index) => (
-                                <SelectedServiceItem
-                                    key={service.id}
-                                    service={service}
-                                    index={index}
-                                    onUpdate={handleUpdateService}
-                                    onRemove={handleServiceToggle}
-                                    baseInputClasses={baseInputClasses}
-                                />
-                            ))}
-                            {selectedServices.length === 0 && <p className="text-xs text-center text-gray-400 py-4">Nenhum serviço selecionado.</p>}
+                        <div className="max-h-60 overflow-y-auto p-1 bg-white border rounded-lg space-y-1">
+                            {selectedServices.length > 0 ? (
+                                selectedServices.map((service, index) => (
+                                    <div key={service.id} className="grid grid-cols-12 gap-2 items-center p-2 rounded-md hover:bg-gray-50">
+                                        <span className="col-span-6 font-medium text-sm text-gray-800">{service.name}</span>
+                                        <span className="col-span-2 text-sm text-gray-600">D: {service.toothNumber || '-'}</span>
+                                        <span className="col-span-2 text-sm text-gray-600">C: {service.color || '-'}</span>
+                                        <span className="col-span-2 text-sm text-gray-600 text-right">Q: {service.quantity || '1'}</span>
+                                        <div className="col-span-12 flex justify-end items-center gap-2 mt-1">
+                                            <span className="text-sm font-semibold text-gray-800">
+                                                Subtotal: R$ {((service.price || 0) * (Number(service.quantity) || 1)).toFixed(2)}
+                                            </span>
+                                            <button type="button" onClick={() => setEditingService({ index, data: service })} className="p-1 text-blue-600 hover:text-blue-800"><LucideEdit size={16}/></button>
+                                            <button type="button" onClick={() => handleServiceToggle(service)} className="p-1 text-red-500 hover:text-red-700"><LucideTrash2 size={16}/></button>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-xs text-center text-gray-400 py-4">Nenhum serviço selecionado.</p>
+                            )}
                         </div>
+                        
+                        {/* --- [LÓGICA REFEITA 4/4] --- */}
+                        {/* Formulário de Edição que aparece quando um item é selecionado */}
+                        {editingService && (
+                            <div className="mt-4 p-4 bg-indigo-50 border-t-2 border-indigo-200 rounded-b-lg">
+                                <h4 className="text-md font-bold text-indigo-800 mb-3">Editando: {editingService.data.name}</h4>
+                                <div className="grid grid-cols-3 gap-3 items-end">
+                                    <Input label="Nº Dente" value={editingService.data.toothNumber} onChange={e => handleEditChange('toothNumber', e.target.value)} />
+                                    <Input label="Cor" value={editingService.data.color} onChange={e => handleEditChange('color', e.target.value)} />
+                                    <Input label="Qtd" type="number" min="1" value={editingService.data.quantity} onChange={e => handleEditChange('quantity', e.target.value)} />
+                                </div>
+                                <div className="flex justify-end gap-2 mt-3">
+                                    <Button onClick={() => setEditingService(null)} variant="secondary" className="py-1 px-2 text-xs">Cancelar</Button>
+                                    <Button onClick={handleUpdateService} variant="primary" className="py-1 px-2 text-xs">Atualizar Serviço</Button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
                 
+                {/* Parte inferior do formulário (Status, Observações, Total) - Sem alterações */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -648,17 +592,14 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     </div>
                     <Input label="Data de Conclusão" id="completionDate" type="date" ref={el => formRef.current.completionDate = el} defaultValue={order?.completionDate} />
                 </div>
-
                 <div>
                     <label htmlFor="observations" className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
                     <textarea id="observations" ref={el => formRef.current.observations = el} defaultValue={order?.observations} rows="3" className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"></textarea>
                 </div>
-
                 <div className="bg-indigo-50 p-4 rounded-lg text-right">
                     <p className="text-sm text-gray-600">Comissão ({employees.find(e => e.id === selectedEmployeeId)?.commission || 0}%): <span className="font-semibold">R$ {commissionValue.toFixed(2)}</span></p>
                     <p className="text-xl font-bold text-indigo-800">Total: R$ {totalValue.toFixed(2)}</p>
                 </div>
-
                 <div className="flex justify-end gap-3 pt-4">
                     <Button type="button" onClick={onClose} variant="secondary">Cancelar</Button>
                     <Button type="submit" variant="primary">Salvar Ordem de Serviço</Button>
@@ -668,9 +609,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     );
 };
 
-// ... O restante do seu arquivo continua daqui para baixo sem alterações ...
-// ...
-// ...
 
 const ServiceOrders = ({ userId, services, clients, employees, orders, priceTables }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -975,6 +913,10 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         </div>
     );
 };
+
+// --- O restante do arquivo (Reports, PriceTables, etc.) continua aqui sem alterações ---
+// --- Cole o restante do seu arquivo original a partir daqui ---
+// O código abaixo é idêntico ao original e está incluído para garantir que o arquivo esteja completo.
 
 const Reports = ({ orders, employees, clients }) => {
     const [reportType, setReportType] = useState('completedByPeriod');
