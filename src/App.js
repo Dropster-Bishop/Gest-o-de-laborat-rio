@@ -340,6 +340,61 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
     );
 };
 
+// --- [NOVO COMPONENTE] ---
+// Componente para renderizar cada linha da lista de serviços selecionados
+const SelectedServiceItem = React.memo(({ service, index, onUpdate, onRemove, baseInputClasses }) => {
+    // Handler genérico para atualizar qualquer campo do serviço
+    const handleChange = (field, value) => {
+        const updatedService = { ...service, [field]: value };
+        onUpdate(index, updatedService);
+    };
+
+    return (
+        <div className="grid grid-cols-12 gap-2 items-center">
+            <span className="col-span-5 text-sm text-gray-800">{service.name}</span>
+            <div className="col-span-2">
+                <input
+                    type="text"
+                    placeholder="Dente"
+                    value={service.toothNumber || ''}
+                    onChange={(e) => handleChange('toothNumber', e.target.value)}
+                    className={baseInputClasses}
+                />
+            </div>
+            <div className="col-span-1">
+                <input
+                    type="text"
+                    placeholder="Cor"
+                    value={service.color || ''}
+                    onChange={(e) => handleChange('color', e.target.value)}
+                    className={baseInputClasses}
+                />
+            </div>
+            <div className="col-span-1">
+                <input
+                    type="number"
+                    placeholder="Qtd"
+                    value={service.quantity || 1}
+                    onChange={(e) => handleChange('quantity', e.target.value)}
+                    className={`${baseInputClasses} text-center`}
+                    min="1"
+                />
+            </div>
+            <span className="col-span-2 text-sm text-right font-semibold text-gray-800">
+                R$ {((service.price || 0) * (Number(service.quantity) || 1)).toFixed(2)}
+            </span>
+            <button
+                type="button"
+                onClick={() => onRemove(service)}
+                className="text-red-500 hover:text-red-700 p-1 justify-self-center col-span-1"
+            >
+                <LucideTrash2 size={16} />
+            </button>
+        </div>
+    );
+});
+
+
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState({});
@@ -391,7 +446,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     }, [selectedClientId, clients, priceTables, services, order]);
 
     useEffect(() => {
-        const newTotal = selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
+        const newTotal = selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0);
         setTotalValue(newTotal);
 
         if (selectedEmployeeId) {
@@ -422,14 +477,13 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         );
     };
     
-    const handleServiceDetailChange = (index, field, value) => {
+    // --- [NOVA FUNÇÃO] ---
+    // Atualiza um serviço específico na lista de selecionados
+    const handleUpdateService = (index, updatedService) => {
         setSelectedServices(currentServices =>
-            currentServices.map((item, idx) => {
-                if (index === idx) {
-                    return { ...item, [field]: value };
-                }
-                return item;
-            })
+            currentServices.map((item, idx) =>
+                idx === index ? updatedService : item
+            )
         );
     };
 
@@ -555,21 +609,16 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                     <span className="col-span-1"></span>
                                 </div>
                              )}
+                            {/* --- [ÁREA MODIFICADA] --- */}
                             {selectedServices.map((service, index) => (
-                                <div key={service.id} className="grid grid-cols-12 gap-2 items-center">
-                                    <span className="col-span-5 text-sm text-gray-800">{service.name}</span>
-                                    <div className="col-span-2">
-                                        <input type="text" placeholder="Dente" value={service.toothNumber} onChange={(e) => handleServiceDetailChange(index, 'toothNumber', e.target.value)} className={baseInputClasses} />
-                                    </div>
-                                    <div className="col-span-1">
-                                        <input type="text" placeholder="Cor" value={service.color} onChange={(e) => handleServiceDetailChange(index, 'color', e.target.value)} className={baseInputClasses} />
-                                    </div>
-                                    <div className="col-span-1">
-                                        <input type="number" placeholder="Qtd" value={service.quantity} onChange={(e) => handleServiceDetailChange(index, 'quantity', e.target.value)} className={`${baseInputClasses} text-center`} />
-                                    </div>
-                                    <span className="col-span-2 text-sm text-right font-semibold text-gray-800">R$ {((service.price || 0) * (Number(service.quantity) || 1)).toFixed(2)}</span>
-                                    <button type="button" onClick={() => handleServiceToggle(service)} className="text-red-500 hover:text-red-700 p-1 justify-self-center col-span-1"><LucideTrash2 size={16} /></button>
-                                </div>
+                                <SelectedServiceItem
+                                    key={service.id}
+                                    service={service}
+                                    index={index}
+                                    onUpdate={handleUpdateService}
+                                    onRemove={handleServiceToggle}
+                                    baseInputClasses={baseInputClasses}
+                                />
                             ))}
                             {selectedServices.length === 0 && <p className="text-xs text-center text-gray-400 py-4">Nenhum serviço selecionado.</p>}
                         </div>
@@ -609,7 +658,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
 };
 
 // ... O restante do seu código (ServiceOrders, Reports, AppLayout, App, etc.) continua aqui ...
-// Apenas o componente OrderFormModal precisou ser substituído. O resto pode permanecer igual.
+// O resto do arquivo permanece o mesmo, a mudança crucial foi feita acima.
 
 const ServiceOrders = ({ userId, services, clients, employees, orders, priceTables }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
