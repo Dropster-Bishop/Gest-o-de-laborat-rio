@@ -340,7 +340,7 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
     );
 };
 
-
+// --- ALTERAÇÃO INICIA ---
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState({});
@@ -359,7 +359,9 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     const [editingService, setEditingService] = useState(null); 
     const [totalValue, setTotalValue] = useState(0);
     const [commissionValue, setCommissionValue] = useState(0);
-    const [selectedEmployeeId, setSelectedEmployeeId] = useState(order?.employeeId || '');
+    const [assignedEmployees, setAssignedEmployees] = useState(order?.assignedEmployees || []);
+    const [employeeToAdd, setEmployeeToAdd] = useState('');
+    const [commissionPercentageToAdd, setCommissionPercentageToAdd] = useState('');
     const [selectedMaterial, setSelectedMaterial] = useState('');
     const formRef = useRef({});
 
@@ -395,14 +397,44 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         const newTotal = selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0);
         setTotalValue(newTotal);
 
-        if (selectedEmployeeId) {
-            const employee = employees.find(e => e.id === selectedEmployeeId);
-            if (employee) {
-                const commission = (newTotal * (employee.commission / 100));
-                setCommissionValue(commission);
+        const totalCommission = assignedEmployees.reduce((sum, emp) => {
+            const commission = newTotal * ((emp.commissionPercentage || 0) / 100);
+            return sum + commission;
+        }, 0);
+        setCommissionValue(totalCommission);
+
+    }, [selectedServices, assignedEmployees]);
+    
+    const handleAddEmployee = () => {
+        if (!employeeToAdd || !commissionPercentageToAdd) {
+            alert("Selecione um funcionário e defina a comissão.");
+            return;
+        }
+        
+        const employee = employees.find(e => e.id === employeeToAdd);
+        if (!employee) return;
+        
+        if (assignedEmployees.some(e => e.id === employee.id)) {
+            alert("Este funcionário já foi adicionado.");
+            return;
+        }
+
+        setAssignedEmployees(prev => [
+            ...prev, 
+            { 
+                id: employee.id, 
+                name: employee.name, 
+                commissionPercentage: parseFloat(commissionPercentageToAdd) 
             }
-        } else { setCommissionValue(0); }
-    }, [selectedServices, selectedEmployeeId, employees]);
+        ]);
+        
+        setEmployeeToAdd('');
+        setCommissionPercentageToAdd('');
+    };
+
+    const handleRemoveEmployee = (employeeId) => {
+        setAssignedEmployees(prev => prev.filter(e => e.id !== employeeId));
+    };
 
     const handleServiceToggle = (service) => {
         const serviceWithDetails = {
@@ -435,27 +467,39 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         e.preventDefault();
         if (!userId) return;
 
-        const employee = employees.find(emp => emp.id === selectedEmployeeId);
         const client = clients.find(c => c.id === selectedClientId);
 
-        if (!client || !employee) { alert('Cliente e Funcionário são obrigatórios.'); return; }
+        if (!client || assignedEmployees.length === 0) { 
+            alert('Cliente e ao menos um Funcionário são obrigatórios.'); 
+            return; 
+        }
 
         const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
         
         const finalServices = selectedServices.map(s => ({ ...s, quantity: Number(s.quantity) || 1, }));
         const finalTotalValue = finalServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
+        
+        const finalAssignedEmployees = assignedEmployees.map(emp => {
+            const commission = finalTotalValue * (emp.commissionPercentage / 100);
+            return { ...emp, commissionValue: commission };
+        });
+
+        const totalCommissionValue = finalAssignedEmployees.reduce((sum, emp) => sum + emp.commissionValue, 0);
 
         const orderData = {
             clientId: client.id, clientName: client.name, client: client,
             patientName: formRef.current.patientName.value,
-            employeeId: employee.id, employeeName: employee.name, employee: employee,
+            // Main employee name field for quick display
+            employeeName: finalAssignedEmployees.map(e => e.name).join(', '), 
+            assignedEmployees: finalAssignedEmployees, // Array of employees with commissions
             openDate: formRef.current.openDate.value, deliveryDate: formRef.current.deliveryDate.value,
             completionDate: formRef.current.completionDate.value || null, status: formRef.current.status.value,
-            services: finalServices, totalValue: finalTotalValue,
-            commissionPercentage: employee.commission,
-            commissionValue: finalTotalValue * (employee.commission / 100),
+            services: finalServices, 
+            totalValue: finalTotalValue,
+            commissionValue: totalCommissionValue, // Total commission
             observations: formRef.current.observations.value,
-            isPaid: order ? order.isPaid : false, updatedAt: serverTimestamp()
+            isPaid: order ? order.isPaid : false, 
+            updatedAt: serverTimestamp()
         };
 
         try {
@@ -475,31 +519,50 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     return (
         <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
             <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <div className="space-y-4">
-                        <div>
-                            <label htmlFor="clientId" className="block text-sm font-medium text-gray-700 mb-1">Cliente (Dentista/Clínica)</label>
-                            <select id="clientId" value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" required>
-                                <option value="">Selecione um cliente</option>
-                                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="employeeId" className="block text-sm font-medium text-gray-700 mb-1">Funcionário Responsável</label>
-                            <select id="employeeId" value={selectedEmployeeId} onChange={e => setSelectedEmployeeId(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" required>
-                                <option value="">Selecione um funcionário</option>
+                 {/* --- DADOS GERAIS --- */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                     <div>
+                        <label htmlFor="clientId" className="block text-sm font-medium text-gray-700 mb-1">Cliente (Dentista/Clínica)</label>
+                        <select id="clientId" value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" required>
+                            <option value="">Selecione um cliente</option>
+                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    </div>
+                     <Input label="Nome do Paciente" id="patientName" type="text" ref={el => formRef.current.patientName = el} defaultValue={order?.patientName} required />
+                     <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate} required />
+                     <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required />
+                </div>
+                 {/* --- FUNCIONÁRIOS --- */}
+                 <div className="p-4 border rounded-lg bg-gray-50">
+                    <h3 className="text-lg font-medium text-gray-800 mb-3">Funcionários Responsáveis</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end mb-3">
+                        <div className="md:col-span-1">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Funcionário</label>
+                            <select value={employeeToAdd} onChange={e => setEmployeeToAdd(e.target.value)} className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                                <option value="">Selecione...</option>
                                 {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                             </select>
                         </div>
+                         <Input label="Comissão (%)" type="number" value={commissionPercentageToAdd} onChange={e => setCommissionPercentageToAdd(e.target.value)} placeholder="Ex: 20" />
+                        <Button onClick={handleAddEmployee} variant="secondary" className="h-11">Adicionar Funcionário</Button>
                     </div>
-                    <div className="space-y-4">
-                        <Input label="Nome do Paciente" id="patientName" type="text" ref={el => formRef.current.patientName = el} defaultValue={order?.patientName} required />
-                        <div className="grid grid-cols-2 gap-4">
-                            <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate} required />
-                            <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required />
-                        </div>
+                    
+                    <div className="space-y-2">
+                        {assignedEmployees.map(emp => (
+                            <div key={emp.id} className="flex justify-between items-center bg-white p-2 rounded-md border">
+                                <span>{emp.name}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-indigo-600">{emp.commissionPercentage}%</span>
+                                    <button type="button" onClick={() => handleRemoveEmployee(emp.id)} className="p-1 text-red-500 hover:text-red-700" title="Remover funcionário">
+                                        <LucideTrash2 size={16}/>
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                         {assignedEmployees.length === 0 && <p className="text-xs text-center text-gray-500 py-2">Nenhum funcionário adicionado.</p>}
                     </div>
                 </div>
+
 
                 <div className="grid grid-cols-2 gap-6">
                     <div>
@@ -602,8 +665,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     <textarea id="observations" ref={el => formRef.current.observations = el} defaultValue={order?.observations} rows="3" className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"></textarea>
                 </div>
                 <div className="bg-indigo-50 p-4 rounded-lg text-right">
-                    <p className="text-sm text-gray-600">Comissão ({employees.find(e => e.id === selectedEmployeeId)?.commission || 0}%): <span className="font-semibold">R$ {commissionValue.toFixed(2)}</span></p>
-                    <p className="text-xl font-bold text-indigo-800">Total: R$ {totalValue.toFixed(2)}</p>
+                    <p className="text-sm text-gray-600">Comissão Total: <span className="font-semibold">R$ {commissionValue.toFixed(2)}</span></p>
+                    <p className="text-xl font-bold text-indigo-800">Total O.S.: R$ {totalValue.toFixed(2)}</p>
                 </div>
                 <div className="flex justify-end gap-3 pt-4">
                     <Button type="button" onClick={onClose} variant="secondary">Cancelar</Button>
@@ -613,10 +676,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         </Modal>
     );
 };
-
-// ... O restante do seu arquivo (ServiceOrders, Reports, AppLayout, App, etc.) continua daqui, sem alterações ...
-// ...
-// ...
+// --- ALTERAÇÃO TERMINA ---
 
 const ServiceOrders = ({ userId, services, clients, employees, orders, priceTables }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -673,16 +733,16 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             alert('Não foi possível gerar o PDF. Bibliotecas necessárias não encontradas.');
             return;
         }
-
-        const commissionEl = input.querySelector('#commission-to-hide');
-        const totalEl = input.querySelector('#total-to-hide');
-
-        if (commissionEl) commissionEl.style.visibility = 'hidden';
-        if (totalEl) totalEl.style.visibility = 'hidden';
+        
+        // --- ALTERAÇÃO INICIA ---
+        const elementsToHide = input.querySelectorAll('.hide-on-print');
+        elementsToHide.forEach(el => el.style.visibility = 'hidden');
+        // --- ALTERAÇÃO TERMINA ---
 
         window.html2canvas(input, { scale: 2, useCORS: true }).then(canvas => {
-            if (commissionEl) commissionEl.style.visibility = 'visible';
-            if (totalEl) totalEl.style.visibility = 'visible';
+            // --- ALTERAÇÃO INICIA ---
+            elementsToHide.forEach(el => el.style.visibility = 'visible');
+            // --- ALTERAÇÃO TERMINA ---
             
             const imgData = canvas.toDataURL('image/png');
             const { jsPDF } = window.jspdf;
@@ -719,8 +779,9 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                 pdf.save(`OS_${currentOrder.number}.pdf`);
             }
         }).catch(err => {
-            if (commissionEl) commissionEl.style.visibility = 'visible';
-            if (totalEl) totalEl.style.visibility = 'visible';
+            // --- ALTERAÇÃO INICIA ---
+            elementsToHide.forEach(el => el.style.visibility = 'visible');
+            // --- ALTERAÇÃO TERMINA ---
             console.error("Error generating PDF:", err);
             alert("Ocorreu um erro ao gerar o PDF.");
         });
@@ -757,7 +818,8 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         const matchesFilter = filter === 'Todos' || order.status === filter;
         const matchesSearch = searchTerm === '' ||
             order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.patientName.toLowerCase().includes(searchTerm.toLowerCase());
+            order.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (order.employeeName && order.employeeName.toLowerCase().includes(searchTerm.toLowerCase()));
         return matchesFilter && matchesSearch;
     });
 
@@ -770,7 +832,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                         <LucideSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                         <Input
                             type="text"
-                            placeholder="Buscar por Cliente ou Paciente..."
+                            placeholder="Buscar por Cliente, Paciente..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="pl-10"
@@ -802,7 +864,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                 <th scope="col" className="px-6 py-3">Nº O.S.</th>
                                 <th scope="col" className="px-6 py-3">Cliente</th>
                                 <th scope="col" className="px-6 py-3">Paciente</th>
-                                <th scope="col" className="px-6 py-3">Responsável</th>
+                                <th scope="col" className="px-6 py-3">Responsável(eis)</th>
                                 <th scope="col" className="px-6 py-3">Data Entrega</th>
                                 <th scope="col" className="px-6 py-3">Status</th>
                                 <th scope="col" className="px-6 py-3 text-center">Ações</th>
@@ -868,14 +930,27 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                <p><strong>Endereço:</strong> {currentOrder.client.address}</p>
                            </div>
                            <div>
-                               <h3 className="font-bold mb-2 border-b">Responsável</h3>
-                               <p><strong>Nome:</strong> {currentOrder.employee.name}</p>
-                               <p><strong>Cargo:</strong> {currentOrder.employee.role}</p>
-                               <h3 className="font-bold mb-2 mt-4 border-b">Datas</h3>
+                               <h3 className="font-bold mb-2 border-b">Datas</h3>
                                <p><strong>Prev. Entrega:</strong> {new Date(currentOrder.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
                                <p><strong>Conclusão:</strong> {currentOrder.completionDate ? new Date(currentOrder.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '---'}</p>
                            </div>
                        </div>
+                        {/* --- ALTERAÇÃO INICIA --- */}
+                        <div className="mb-6">
+                            <h3 className="font-bold mb-2 border-b">Responsáveis e Comissões</h3>
+                            <div className="space-y-1 text-sm">
+                                {currentOrder.assignedEmployees?.map(emp => (
+                                <div key={emp.id} className="flex justify-between items-center">
+                                    <span>{emp.name}</span>
+                                    <span className='hide-on-print'>
+                                        {emp.commissionPercentage}% - <strong>R$ {(emp.commissionValue || 0).toFixed(2)}</strong>
+                                    </span>
+                                </div>
+                                ))}
+                            </div>
+                        </div>
+                        {/* --- ALTERAÇÃO TERMINA --- */}
+
                        <h3 className="font-bold mb-2 border-b">Serviços Solicitados</h3>
                        <table className="w-full text-left mb-6">
                            <thead className="bg-gray-100">
@@ -906,9 +981,11 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                               <p className="text-sm italic">{currentOrder.observations || 'Nenhuma observação.'}</p>
                           </div>
                           <div className="text-right">
-                              <p id="commission-to-hide"><strong>Comissão ({currentOrder.commissionPercentage}%):</strong> R$ {currentOrder.commissionValue.toFixed(2)}</p>
-                              <p id="total-to-hide" className="text-lg font-bold"><strong>Valor Total:</strong> R$ {currentOrder.totalValue.toFixed(2)}</p>
+                               {/* --- ALTERAÇÃO INICIA --- */}
+                              <p className="hide-on-print"><strong>Comissão Total:</strong> R$ {(currentOrder.commissionValue || 0).toFixed(2)}</p>
+                              <p className="text-lg font-bold"><strong>Valor Total:</strong> R$ {currentOrder.totalValue.toFixed(2)}</p>
                               <p className="font-bold mt-2"><strong>Status:</strong> {currentOrder.status}</p>
+                               {/* --- ALTERAÇÃO TERMINA --- */}
                           </div>
                        </div>
                     </div>
@@ -937,7 +1014,7 @@ const Reports = ({ orders, employees, clients }) => {
         commissionsByEmployee: 'Relatório de Comissões por Funcionário',
         ordersByClient: 'Relatório de Ordens por Cliente'
     };
-
+    // --- ALTERAÇÃO INICIA ---
     const handleGenerateReport = () => {
         let data = [];
         if (reportType === 'completedByPeriod') {
@@ -953,11 +1030,17 @@ const Reports = ({ orders, employees, clients }) => {
                 return true;
             });
         } else if (reportType === 'commissionsByEmployee') {
+            if (!selectedEmployee) {
+                setResults([]);
+                return;
+            }
             data = orders.filter(o => {
-                if(selectedEmployee === '') return false;
-                if (o.employeeId !== selectedEmployee) return false;
                 const completed = o.status === 'Concluído' && o.completionDate;
                 if (!completed) return false;
+
+                // Check if the selected employee is in the assignedEmployees array
+                if (!o.assignedEmployees?.some(emp => emp.id === selectedEmployee)) return false;
+
                 const completionDate = new Date(o.completionDate);
                 const start = startDate ? new Date(startDate) : null;
                 const end = endDate ? new Date(endDate) : null;
@@ -983,6 +1066,7 @@ const Reports = ({ orders, employees, clients }) => {
         }
         setResults(data);
     };
+    // --- ALTERAÇÃO TERMINA ---
     
     const generateReportPdf = (action = 'print') => {
         const input = reportPrintRef.current;
@@ -1035,11 +1119,16 @@ const Reports = ({ orders, employees, clients }) => {
     const handlePrintReport = () => generateReportPdf('print');
     const handleSaveReportAsPdf = () => generateReportPdf('save');
 
+    // --- ALTERAÇÃO INICIA ---
     const totalCommission = reportType === 'commissionsByEmployee'
-        ? results.reduce((sum, order) => sum + order.commissionValue, 0)
+        ? results.reduce((sum, order) => {
+            const employeeCommission = order.assignedEmployees?.find(emp => emp.id === selectedEmployee)?.commissionValue || 0;
+            return sum + employeeCommission;
+          }, 0)
         : 0;
 
     const totalValue = results.reduce((sum, order) => sum + order.totalValue, 0);
+    // --- ALTERAÇÃO TERMINA ---
 
     const getReportSubTitle = () => {
         let period = '';
@@ -1123,22 +1212,32 @@ const Reports = ({ orders, employees, clients }) => {
                                     <th scope="col" className="px-6 py-3">Nº O.S.</th>
                                     <th scope="col" className="px-6 py-3">Cliente</th>
                                     <th scope="col" className="px-6 py-3">Data</th>
-                                    <th scope="col" className="px-6 py-3">Responsável</th>
+                                    <th scope="col" className="px-6 py-3">Responsável(eis)</th>
                                     <th scope="col" className="px-6 py-3 text-right">Valor Total</th>
                                     {reportType === 'commissionsByEmployee' && <th scope="col" className="px-6 py-3 text-right">Comissão</th>}
                                 </tr>
                             </thead>
                             <tbody>
-                                {results.map(order => (
-                                    <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
-                                        <td className="px-6 py-4 font-medium">#{order.number}</td>
-                                        <td className="px-6 py-4">{order.clientName}</td>
-                                        <td className="px-6 py-4">{new Date(reportType === 'completedByPeriod' || reportType === 'commissionsByEmployee' ? order.completionDate : order.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                                        <td className="px-6 py-4">{order.employeeName}</td>
-                                        <td className="px-6 py-4 text-right font-bold">R$ {order.totalValue.toFixed(2)}</td>
-                                        {reportType === 'commissionsByEmployee' && <td className="px-6 py-4 text-right">R$ {order.commissionValue.toFixed(2)}</td>}
-                                    </tr>
-                                ))}
+                                {/* --- ALTERAÇÃO INICIA --- */}
+                                {results.map(order => {
+                                    const employeeCommission = reportType === 'commissionsByEmployee'
+                                        ? order.assignedEmployees?.find(emp => emp.id === selectedEmployee)?.commissionValue || 0
+                                        : 0;
+
+                                    return (
+                                        <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
+                                            <td className="px-6 py-4 font-medium">#{order.number}</td>
+                                            <td className="px-6 py-4">{order.clientName}</td>
+                                            <td className="px-6 py-4">{new Date(reportType === 'completedByPeriod' || reportType === 'commissionsByEmployee' ? order.completionDate : order.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                            <td className="px-6 py-4">{order.employeeName}</td>
+                                            <td className="px-6 py-4 text-right font-bold">R$ {order.totalValue.toFixed(2)}</td>
+                                            {reportType === 'commissionsByEmployee' && (
+                                                <td className="px-6 py-4 text-right">R$ {employeeCommission.toFixed(2)}</td>
+                                            )}
+                                        </tr>
+                                    );
+                                })}
+                                {/* --- ALTERAÇÃO TERMINA --- */}
                             </tbody>
                             <tfoot className="font-bold bg-gray-100">
                                 <tr>
@@ -2190,7 +2289,7 @@ const AppLayout = ({ user, userProfile }) => {
                          { name: 'role', label: 'Função / Cargo', type: 'text' },
                          { name: 'phone', label: 'Telefone', type: 'tel' },
                          { name: 'email', label: 'Email', type: 'email' },
-                         { name: 'commission', label: 'Comissão (%)', type: 'number', required: true },
+                         { name: 'commission', label: 'Comissão Padrão (%)', type: 'number', required: true },
                      ]}
                       renderItem={(items, onEdit, onDelete) => (
                          <table className="w-full text-sm text-left text-gray-500">
@@ -2198,7 +2297,7 @@ const AppLayout = ({ user, userProfile }) => {
                                  <tr>
                                      <th scope="col" className="px-6 py-3">Nome</th>
                                      <th scope="col" className="px-6 py-3">Cargo</th>
-                                     <th scope="col" className="px-6 py-3">Comissão</th>
+                                     <th scope="col" className="px-6 py-3">Comissão Padrão</th>
                                      <th scope="col" className="px-6 py-3 text-center">Ações</th>
                                  </tr>
                              </thead>
