@@ -136,11 +136,10 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
                                         <p className="font-semibold text-gray-800">OS #{order.number} - {order.clientName}</p>
                                         <p className="text-sm text-gray-500">Entrega em: {new Date(order.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
                                     </div>
-                                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${
-                                        order.status === 'Pendente' ? 'bg-yellow-100 text-yellow-800' :
-                                        order.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
-                                        'bg-green-100 text-green-800'
-                                    }`}>{order.status}</span>
+                                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${order.status === 'Pendente' ? 'bg-yellow-100 text-yellow-800' :
+                                            order.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
+                                                'bg-green-100 text-green-800'
+                                        }`}>{order.status}</span>
                                 </li>
                             ))}
                         </ul>
@@ -207,8 +206,8 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
         fields.forEach(field => {
             const inputElement = formRef.current[field.name];
             if (inputElement) {
-                if(inputElement.type === 'textarea') {
-                     formData[field.name] = inputElement.value;
+                if (inputElement.type === 'textarea') {
+                    formData[field.name] = inputElement.value;
                 } else {
                     formData[field.name] = inputElement.value;
                     if (field.type === 'number') {
@@ -286,7 +285,7 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                                 return (
                                     <div key={field.name}>
                                         <label htmlFor={field.name} className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
-                                        <textarea 
+                                        <textarea
                                             id={field.name}
                                             name={field.name}
                                             defaultValue={currentItem ? currentItem[field.name] : ''}
@@ -344,7 +343,7 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState({});
-    
+
     const getInitialServices = () => {
         if (!order || !order.services) return [];
         return order.services.map(s => ({
@@ -356,7 +355,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     };
 
     const [selectedServices, setSelectedServices] = useState(getInitialServices);
-    const [editingService, setEditingService] = useState(null); 
+    const [editingService, setEditingService] = useState(null);
     const [totalValue, setTotalValue] = useState(0);
     const [commissionValue, setCommissionValue] = useState(0);
     const [assignedEmployees, setAssignedEmployees] = useState(order?.assignedEmployees || []);
@@ -368,7 +367,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     useEffect(() => {
         const client = clients.find(c => c.id === selectedClientId);
         const priceTableId = client?.priceTableId;
-        setSelectedMaterial(''); 
+        setSelectedMaterial('');
 
         let servicesForClient;
         if (priceTableId) {
@@ -380,7 +379,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 }).filter(s => s.id);
             } else { servicesForClient = services.map(s => ({ ...s, displayPrice: s.price })); }
         } else { servicesForClient = services.map(s => ({ ...s, displayPrice: s.price })); }
-        
+
         const grouped = servicesForClient.reduce((acc, service) => {
             const material = service.material || 'Outros';
             if (!acc[material]) acc[material] = [];
@@ -404,30 +403,30 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         setCommissionValue(totalCommission);
 
     }, [selectedServices, assignedEmployees]);
-    
+
     const handleAddEmployee = () => {
         if (!employeeToAdd || !commissionPercentageToAdd) {
             alert("Selecione um funcionário e defina a comissão.");
             return;
         }
-        
+
         const employee = employees.find(e => e.id === employeeToAdd);
         if (!employee) return;
-        
+
         if (assignedEmployees.some(e => e.id === employee.id)) {
             alert("Este funcionário já foi adicionado.");
             return;
         }
 
         setAssignedEmployees(prev => [
-            ...prev, 
-            { 
-                id: employee.id, 
-                name: employee.name, 
-                commissionPercentage: parseFloat(commissionPercentageToAdd) 
+            ...prev,
+            {
+                id: employee.id,
+                name: employee.name,
+                commissionPercentage: parseFloat(commissionPercentageToAdd)
             }
         ]);
-        
+
         setEmployeeToAdd('');
         setCommissionPercentageToAdd('');
     };
@@ -448,7 +447,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 : [...prev, serviceWithDetails]
         );
     };
-    
+
     const handleEditChange = (field, value) => {
         setEditingService(current => ({ ...current, data: { ...current.data, [field]: value } }));
     };
@@ -460,25 +459,25 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 idx === editingService.index ? editingService.data : item
             )
         );
-        setEditingService(null); 
+        setEditingService(null);
     };
-    
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!userId) return;
 
         const client = clients.find(c => c.id === selectedClientId);
 
-        if (!client || assignedEmployees.length === 0) { 
-            alert('Cliente e ao menos um Funcionário são obrigatórios.'); 
-            return; 
+        if (!client || assignedEmployees.length === 0) {
+            alert('Cliente e ao menos um Funcionário são obrigatórios.');
+            return;
         }
 
         const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
-        
+
         const finalServices = selectedServices.map(s => ({ ...s, quantity: Number(s.quantity) || 1, }));
         const finalTotalValue = finalServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
-        
+
         const finalAssignedEmployees = assignedEmployees.map(emp => {
             const commission = finalTotalValue * (emp.commissionPercentage / 100);
             return { ...emp, commissionValue: commission };
@@ -490,15 +489,15 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             clientId: client.id, clientName: client.name, client: client,
             patientName: formRef.current.patientName.value,
             // Main employee name field for quick display
-            employeeName: finalAssignedEmployees.map(e => e.name).join(', '), 
+            employeeName: finalAssignedEmployees.map(e => e.name).join(', '),
             assignedEmployees: finalAssignedEmployees, // Array of employees with commissions
             openDate: formRef.current.openDate.value, deliveryDate: formRef.current.deliveryDate.value,
             completionDate: formRef.current.completionDate.value || null, status: formRef.current.status.value,
-            services: finalServices, 
+            services: finalServices,
             totalValue: finalTotalValue,
             commissionValue: totalCommissionValue, // Total commission
             observations: formRef.current.observations.value,
-            isPaid: order ? order.isPaid : false, 
+            isPaid: order ? order.isPaid : false,
             updatedAt: serverTimestamp()
         };
 
@@ -515,25 +514,25 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             onClose();
         } catch (error) { console.error("Error saving service order: ", error); }
     };
-    
+
     return (
         <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
             <form onSubmit={handleSubmit} className="space-y-6">
-                 {/* --- DADOS GERAIS --- */}
+                {/* --- DADOS GERAIS --- */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                     <div>
+                    <div>
                         <label htmlFor="clientId" className="block text-sm font-medium text-gray-700 mb-1">Cliente (Dentista/Clínica)</label>
                         <select id="clientId" value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" required>
                             <option value="">Selecione um cliente</option>
                             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                     </div>
-                     <Input label="Nome do Paciente" id="patientName" type="text" ref={el => formRef.current.patientName = el} defaultValue={order?.patientName} required />
-                     <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate} required />
-                     <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required />
+                    <Input label="Nome do Paciente" id="patientName" type="text" ref={el => formRef.current.patientName = el} defaultValue={order?.patientName} required />
+                    <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate} required />
+                    <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required />
                 </div>
-                 {/* --- FUNCIONÁRIOS --- */}
-                 <div className="p-4 border rounded-lg bg-gray-50">
+                {/* --- FUNCIONÁRIOS --- */}
+                <div className="p-4 border rounded-lg bg-gray-50">
                     <h3 className="text-lg font-medium text-gray-800 mb-3">Funcionários Responsáveis</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end mb-3">
                         <div className="md:col-span-1">
@@ -543,10 +542,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                 {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                             </select>
                         </div>
-                         <Input label="Comissão (%)" type="number" value={commissionPercentageToAdd} onChange={e => setCommissionPercentageToAdd(e.target.value)} placeholder="Ex: 20" />
+                        <Input label="Comissão (%)" type="number" value={commissionPercentageToAdd} onChange={e => setCommissionPercentageToAdd(e.target.value)} placeholder="Ex: 20" />
                         <Button onClick={handleAddEmployee} variant="secondary" className="h-11">Adicionar Funcionário</Button>
                     </div>
-                    
+
                     <div className="space-y-2">
                         {assignedEmployees.map(emp => (
                             <div key={emp.id} className="flex justify-between items-center bg-white p-2 rounded-md border">
@@ -554,12 +553,12 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                 <div className="flex items-center gap-2">
                                     <span className="font-semibold text-indigo-600">{emp.commissionPercentage}%</span>
                                     <button type="button" onClick={() => handleRemoveEmployee(emp.id)} className="p-1 text-red-500 hover:text-red-700" title="Remover funcionário">
-                                        <LucideTrash2 size={16}/>
+                                        <LucideTrash2 size={16} />
                                     </button>
                                 </div>
                             </div>
                         ))}
-                         {assignedEmployees.length === 0 && <p className="text-xs text-center text-gray-500 py-2">Nenhum funcionário adicionado.</p>}
+                        {assignedEmployees.length === 0 && <p className="text-xs text-center text-gray-500 py-2">Nenhum funcionário adicionado.</p>}
                     </div>
                 </div>
 
@@ -568,11 +567,11 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     <div>
                         <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Disponíveis</h3>
                         {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-indigo-600 mb-2">A aplicar preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
-                        
+
                         <div className="space-y-3">
                             <select value={selectedMaterial} onChange={e => setSelectedMaterial(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
                                 <option value="">Selecione um material...</option>
-                                {Object.keys(availableServices).sort().map(material => ( <option key={material} value={material}>{material}</option> ))}
+                                {Object.keys(availableServices).sort().map(material => (<option key={material} value={material}>{material}</option>))}
                             </select>
 
                             {selectedMaterial && (
@@ -588,7 +587,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                             )}
                         </div>
                     </div>
-                    
+
                     <div>
                         <h3 className="text-lg font-medium text-gray-800 mb-2">Serviços Selecionados</h3>
                         <div className="max-h-60 overflow-y-auto p-1 bg-white border rounded-lg">
@@ -600,10 +599,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                             <span className="font-medium text-sm text-gray-800 truncate pr-2">{service.name}</span>
                                             <div className="flex items-center gap-2 flex-shrink-0">
                                                 <button type="button" onClick={() => setEditingService({ index, data: service })} className="p-1 text-blue-600 hover:text-blue-800" title="Editar serviço">
-                                                    <LucideEdit size={16}/>
+                                                    <LucideEdit size={16} />
                                                 </button>
                                                 <button type="button" onClick={() => handleServiceToggle(service)} className="p-1 text-red-500 hover:text-red-700" title="Remover serviço">
-                                                    <LucideTrash2 size={16}/>
+                                                    <LucideTrash2 size={16} />
                                                 </button>
                                             </div>
                                         </div>
@@ -630,7 +629,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                 <p className="text-xs text-center text-gray-400 py-4">Nenhum serviço selecionado.</p>
                             )}
                         </div>
-                        
+
                         {editingService && (
                             <div className="mt-2 p-4 bg-indigo-50 border-t-2 border-indigo-200 rounded-lg">
                                 <h4 className="text-md font-bold text-indigo-800 mb-3">Editando: {editingService.data.name}</h4>
@@ -647,7 +646,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         )}
                     </div>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -713,13 +712,13 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             }
         }
     };
-    
+
     const handleMarkAsPaid = async (orderId, isPaid) => {
         if (!userId) return;
         const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
         try {
             await updateDoc(docRef, { isPaid });
-            const orderNumber = orders.find(o=>o.id === orderId).number;
+            const orderNumber = orders.find(o => o.id === orderId).number;
             alert(`O.S. #${orderNumber} marcada como ${isPaid ? 'Paga' : 'Não Paga'}.`);
         } catch (error) {
             console.error("Erro ao atualizar status de pagamento: ", error);
@@ -733,7 +732,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             alert('Não foi possível gerar o PDF. Bibliotecas necessárias não encontradas.');
             return;
         }
-        
+
         // --- ALTERAÇÃO INICIA ---
         const elementsToHide = input.querySelectorAll('.hide-on-print');
         elementsToHide.forEach(el => el.style.visibility = 'hidden');
@@ -743,7 +742,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             // --- ALTERAÇÃO INICIA ---
             elementsToHide.forEach(el => el.style.visibility = 'visible');
             // --- ALTERAÇÃO TERMINA ---
-            
+
             const imgData = canvas.toDataURL('image/png');
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
@@ -766,10 +765,10 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             heightLeft -= usableHeight;
 
             while (heightLeft > 0) {
-              position -= usableHeight;
-              pdf.addPage();
-              pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledHeight);
-              heightLeft -= usableHeight;
+                position -= usableHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledHeight);
+                heightLeft -= usableHeight;
             }
 
             if (action === 'print') {
@@ -917,77 +916,77 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             {isViewModalOpen && (
                 <Modal onClose={handleCloseModal} title={`Detalhes da O.S. #${currentOrder?.number}`}>
                     <div ref={printRef} className="p-4 bg-white text-gray-800">
-                       <div className="border-b-2 pb-4 mb-4 border-gray-200">
-                           <h2 className="text-2xl font-bold text-indigo-600">Ordem de Serviço #{currentOrder.number}</h2>
-                           <p className="text-sm text-gray-500">Data de Abertura: {new Date(currentOrder.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
-                       </div>
+                        <div className="border-b-2 pb-4 mb-4 border-gray-200">
+                            <h2 className="text-2xl font-bold text-indigo-600">Ordem de Serviço #{currentOrder.number}</h2>
+                            <p className="text-sm text-gray-500">Data de Abertura: {new Date(currentOrder.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
+                        </div>
                         <div className="grid grid-cols-2 gap-6 mb-6">
-                           <div>
-                               <h3 className="font-bold mb-2 border-b">Cliente</h3>
-                               <p><strong>Nome:</strong> {currentOrder.client.name}</p>
-                               <p><strong>Paciente:</strong> {currentOrder.patientName}</p>
-                               <p><strong>Telefone:</strong> {currentOrder.client.phone}</p>
-                               <p><strong>Endereço:</strong> {currentOrder.client.address}</p>
-                           </div>
-                           <div>
-                               <h3 className="font-bold mb-2 border-b">Datas</h3>
-                               <p><strong>Prev. Entrega:</strong> {new Date(currentOrder.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
-                               <p><strong>Conclusão:</strong> {currentOrder.completionDate ? new Date(currentOrder.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '---'}</p>
-                           </div>
-                       </div>
+                            <div>
+                                <h3 className="font-bold mb-2 border-b">Cliente</h3>
+                                <p><strong>Nome:</strong> {currentOrder.client.name}</p>
+                                <p><strong>Paciente:</strong> {currentOrder.patientName}</p>
+                                <p><strong>Telefone:</strong> {currentOrder.client.phone}</p>
+                                <p><strong>Endereço:</strong> {currentOrder.client.address}</p>
+                            </div>
+                            <div>
+                                <h3 className="font-bold mb-2 border-b">Datas</h3>
+                                <p><strong>Prev. Entrega:</strong> {new Date(currentOrder.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
+                                <p><strong>Conclusão:</strong> {currentOrder.completionDate ? new Date(currentOrder.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '---'}</p>
+                            </div>
+                        </div>
                         {/* --- ALTERAÇÃO INICIA --- */}
-                        <div className="mb-6">
+                        <div className="mb-6 hide-on-print">
                             <h3 className="font-bold mb-2 border-b">Responsáveis e Comissões</h3>
                             <div className="space-y-1 text-sm">
                                 {currentOrder.assignedEmployees?.map(emp => (
-                                <div key={emp.id} className="flex justify-between items-center">
-                                    <span>{emp.name}</span>
-                                    <span className='hide-on-print'>
-                                        {emp.commissionPercentage}% - <strong>R$ {(emp.commissionValue || 0).toFixed(2)}</strong>
-                                    </span>
-                                </div>
+                                    <div key={emp.id} className="flex justify-between items-center">
+                                        <span>{emp.name}</span>
+                                        <span>
+                                            {emp.commissionPercentage}% - <strong>R$ {(emp.commissionValue || 0).toFixed(2)}</strong>
+                                        </span>
+                                    </div>
                                 ))}
                             </div>
                         </div>
                         {/* --- ALTERAÇÃO TERMINA --- */}
 
-                       <h3 className="font-bold mb-2 border-b">Serviços Solicitados</h3>
-                       <table className="w-full text-left mb-6">
-                           <thead className="bg-gray-100">
-                               <tr>
-                                   <th className="p-2">Serviço</th>
-                                   <th className="p-2">Dente</th>
-                                   <th className="p-2">Cor</th>
-                                   <th className="p-2 text-center">Qtd</th>
-                                   <th className="p-2 text-right">Subtotal</th>
-                               </tr>
-                           </thead>
-                           <tbody>
-                               {currentOrder.services.map((service, index) => (
-                                   <tr key={index} className="border-b">
-                                       <td className="p-2">{service.name}</td>
-                                       <td className="p-2">{service.toothNumber || '-'}</td>
-                                       <td className="p-2">{service.color || '-'}</td>
-                                       <td className="p-2 text-center">{service.quantity || 1}</td>
-                                       <td className="p-2 text-right">R$ {(service.price * (service.quantity || 1)).toFixed(2)}</td>
-                                   </tr>
-                               ))}
-                           </tbody>
-                       </table>
+                        <h3 className="font-bold mb-2 border-b">Serviços Solicitados</h3>
+                        <table className="w-full text-left mb-6">
+                            <thead className="bg-gray-100">
+                                <tr>
+                                    <th className="p-2">Serviço</th>
+                                    <th className="p-2">Dente</th>
+                                    <th className="p-2">Cor</th>
+                                    <th className="p-2 text-center">Qtd</th>
+                                    <th className="p-2 text-right">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {currentOrder.services.map((service, index) => (
+                                    <tr key={index} className="border-b">
+                                        <td className="p-2">{service.name}</td>
+                                        <td className="p-2">{service.toothNumber || '-'}</td>
+                                        <td className="p-2">{service.color || '-'}</td>
+                                        <td className="p-2 text-center">{service.quantity || 1}</td>
+                                        <td className="p-2 text-right">R$ {(service.price * (service.quantity || 1)).toFixed(2)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
 
-                       <div className="grid grid-cols-2 gap-6 mb-6">
-                          <div>
-                              <h3 className="font-bold mb-2 border-b">Observações</h3>
-                              <p className="text-sm italic">{currentOrder.observations || 'Nenhuma observação.'}</p>
-                          </div>
-                          <div className="text-right">
-                               {/* --- ALTERAÇÃO INICIA --- */}
-                              <p className="hide-on-print"><strong>Comissão Total:</strong> R$ {(currentOrder.commissionValue || 0).toFixed(2)}</p>
-                              <p className="text-lg font-bold"><strong>Valor Total:</strong> R$ {currentOrder.totalValue.toFixed(2)}</p>
-                              <p className="font-bold mt-2"><strong>Status:</strong> {currentOrder.status}</p>
-                               {/* --- ALTERAÇÃO TERMINA --- */}
-                          </div>
-                       </div>
+                        <div className="grid grid-cols-2 gap-6 mb-6">
+                            <div>
+                                <h3 className="font-bold mb-2 border-b">Observações</h3>
+                                <p className="text-sm italic">{currentOrder.observations || 'Nenhuma observação.'}</p>
+                            </div>
+                            <div className="text-right">
+                                {/* --- ALTERAÇÃO INICIA --- */}
+                                <p className="hide-on-print"><strong>Comissão Total:</strong> R$ {(currentOrder.commissionValue || 0).toFixed(2)}</p>
+                                <p className="text-lg font-bold"><strong>Valor Total:</strong> R$ {currentOrder.totalValue.toFixed(2)}</p>
+                                <p className="font-bold mt-2"><strong>Status:</strong> {currentOrder.status}</p>
+                                {/* --- ALTERAÇÃO TERMINA --- */}
+                            </div>
+                        </div>
                     </div>
                     <footer className="flex justify-end gap-3 pt-4 border-t mt-4 p-4">
                         <Button onClick={handleSaveAsPdf}><LucideFileDown size={18} /> Salvar PDF</Button>
@@ -1050,10 +1049,10 @@ const Reports = ({ orders, employees, clients }) => {
                 return true;
             });
         } else if (reportType === 'ordersByClient') {
-             data = orders.filter(o => {
-                if(selectedClient === '') return false;
+            data = orders.filter(o => {
+                if (selectedClient === '') return false;
                 if (o.clientId !== selectedClient) return false;
-                
+
                 const openDate = new Date(o.openDate);
                 const start = startDate ? new Date(startDate) : null;
                 const end = endDate ? new Date(endDate) : null;
@@ -1067,7 +1066,7 @@ const Reports = ({ orders, employees, clients }) => {
         setResults(data);
     };
     // --- ALTERAÇÃO TERMINA ---
-    
+
     const generateReportPdf = (action = 'print') => {
         const input = reportPrintRef.current;
         if (!input || !window.html2canvas || !window.jspdf) {
@@ -1098,10 +1097,10 @@ const Reports = ({ orders, employees, clients }) => {
             heightLeft -= usableHeight;
 
             while (heightLeft > 0) {
-              position -= usableHeight;
-              pdf.addPage();
-              pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledHeight);
-              heightLeft -= usableHeight;
+                position -= usableHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledHeight);
+                heightLeft -= usableHeight;
             }
 
             if (action === 'print') {
@@ -1115,7 +1114,7 @@ const Reports = ({ orders, employees, clients }) => {
             alert("Ocorreu um erro ao gerar o PDF.");
         });
     };
-    
+
     const handlePrintReport = () => generateReportPdf('print');
     const handleSaveReportAsPdf = () => generateReportPdf('save');
 
@@ -1124,7 +1123,7 @@ const Reports = ({ orders, employees, clients }) => {
         ? results.reduce((sum, order) => {
             const employeeCommission = order.assignedEmployees?.find(emp => emp.id === selectedEmployee)?.commissionValue || 0;
             return sum + employeeCommission;
-          }, 0)
+        }, 0)
         : 0;
 
     const totalValue = results.reduce((sum, order) => sum + order.totalValue, 0);
@@ -1133,7 +1132,7 @@ const Reports = ({ orders, employees, clients }) => {
     const getReportSubTitle = () => {
         let period = '';
         if (startDate && endDate) {
-            period = `Período: ${new Date(startDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'})} a ${new Date(endDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}`;
+            period = `Período: ${new Date(startDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })} a ${new Date(endDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`;
         }
         if (reportType === 'commissionsByEmployee' && selectedEmployee) {
             const employeeName = employees.find(e => e.id === selectedEmployee)?.name || '';
@@ -1154,30 +1153,30 @@ const Reports = ({ orders, employees, clients }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
                     <div>
                         <label htmlFor="reportType" className="block text-sm font-medium text-gray-700 mb-1">Tipo de Relatório</label>
-                        <select id="reportType" value={reportType} onChange={e => {setReportType(e.target.value); setResults([]);}} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                        <select id="reportType" value={reportType} onChange={e => { setReportType(e.target.value); setResults([]); }} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
                             <option value="completedByPeriod">Serviços Concluídos</option>
                             <option value="commissionsByEmployee">Comissões por Funcionário</option>
                             <option value="ordersByClient">Ordens por Cliente</option>
                         </select>
                     </div>
-                     {reportType === 'commissionsByEmployee' && (
-                         <div>
-                             <label htmlFor="employee" className="block text-sm font-medium text-gray-700 mb-1">Funcionário</label>
-                             <select id="employee" value={selectedEmployee} onChange={e => setSelectedEmployee(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
-                                 <option value="">Selecione...</option>
-                                 {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                             </select>
-                         </div>
-                     )}
-                     {reportType === 'ordersByClient' && (
-                         <div>
-                             <label htmlFor="client" className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-                             <select id="client" value={selectedClient} onChange={e => setSelectedClient(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
-                                 <option value="">Selecione...</option>
-                                 {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                             </select>
-                         </div>
-                     )}
+                    {reportType === 'commissionsByEmployee' && (
+                        <div>
+                            <label htmlFor="employee" className="block text-sm font-medium text-gray-700 mb-1">Funcionário</label>
+                            <select id="employee" value={selectedEmployee} onChange={e => setSelectedEmployee(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                                <option value="">Selecione...</option>
+                                {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                            </select>
+                        </div>
+                    )}
+                    {reportType === 'ordersByClient' && (
+                        <div>
+                            <label htmlFor="client" className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+                            <select id="client" value={selectedClient} onChange={e => setSelectedClient(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                                <option value="">Selecione...</option>
+                                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                    )}
                     <Input label="Data Inicial" id="startDate" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
                     <Input label="Data Final" id="endDate" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
                     <Button onClick={handleGenerateReport} variant="primary" className="h-11">Gerar</Button>
@@ -1186,17 +1185,17 @@ const Reports = ({ orders, employees, clients }) => {
 
             <div className="bg-white p-6 rounded-2xl shadow-md">
                 <div className="flex justify-between items-center mb-4">
-                     <h2 className="text-xl font-bold text-gray-700">Resultados</h2>
-                     {results.length > 0 && (
+                    <h2 className="text-xl font-bold text-gray-700">Resultados</h2>
+                    {results.length > 0 && (
                         <div className="flex gap-2">
-                             <Button onClick={handleSaveReportAsPdf} variant="secondary">
-                                 <LucideFileDown size={18} /> PDF
-                             </Button>
-                             <Button onClick={handlePrintReport}>
-                                 <LucidePrinter size={18} /> Imprimir
-                             </Button>
+                            <Button onClick={handleSaveReportAsPdf} variant="secondary">
+                                <LucideFileDown size={18} /> PDF
+                            </Button>
+                            <Button onClick={handlePrintReport}>
+                                <LucidePrinter size={18} /> Imprimir
+                            </Button>
                         </div>
-                     )}
+                    )}
                 </div>
                 <div ref={reportPrintRef} className="p-4 rounded-lg">
                     {results.length > 0 && (
@@ -1292,9 +1291,9 @@ const PriceTableForm = ({ table, services, onSubmit, onCancel }) => {
                     {services.map(service => {
                         const tableService = tableServices.find(s => s.serviceId === service.id);
                         return (
-                             <div key={service.id} className="grid grid-cols-3 gap-4 items-center">
+                            <div key={service.id} className="grid grid-cols-3 gap-4 items-center">
                                 <label htmlFor={service.id} className="text-sm text-gray-700 col-span-2">{service.name} (Padrão: R$ {service.price.toFixed(2)})</label>
-                                <Input 
+                                <Input
                                     id={service.id}
                                     type="number"
                                     placeholder="Preço Customizado"
@@ -1307,7 +1306,7 @@ const PriceTableForm = ({ table, services, onSubmit, onCancel }) => {
                     })}
                 </div>
             </div>
-             <div className="flex justify-end gap-3 pt-4">
+            <div className="flex justify-end gap-3 pt-4">
                 <Button type="button" onClick={onCancel} variant="secondary">Cancelar</Button>
                 <Button type="submit" variant="primary">Salvar Tabela</Button>
             </div>
@@ -1324,7 +1323,7 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
             ...service,
             customPrice: customService?.customPrice,
         };
-    }).sort((a,b) => a.name.localeCompare(b.name));
+    }).sort((a, b) => a.name.localeCompare(b.name));
 
     const groupedServices = combinedServices.reduce((acc, service) => {
         const material = service.material || 'Outros';
@@ -1357,7 +1356,7 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
             const scaledHeight = usableWidth * aspectRatio;
 
             pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledHeight);
-            
+
             if (action === 'print') {
                 pdf.autoPrint();
                 window.open(pdf.output('bloburl'), '_blank');
@@ -1369,7 +1368,7 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
             alert("Ocorreu um erro ao gerar o PDF.");
         });
     };
-    
+
     return (
         <Modal onClose={onClose} title={`Visualizar Tabela de Preços`} size="4xl">
             <div ref={printRef} className="p-4 bg-white text-gray-800">
@@ -1413,7 +1412,7 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
                         ))}
                     </tbody>
                 </table>
-                 <footer className="mt-8 text-center text-xs text-gray-500">
+                <footer className="mt-8 text-center text-xs text-gray-500">
                     <p>Este documento é uma representação da tabela de preços "{table.name}". Os preços padrão são a base, e os preços customizados se aplicam especificamente a esta tabela.</p>
                 </footer>
             </div>
@@ -1470,20 +1469,20 @@ const PriceTables = ({ userId, services, companyProfile }) => {
             console.error("Erro ao salvar tabela de preços: ", error);
         }
     };
-    
+
     const handleDeleteTable = async (id) => {
-        if(window.confirm('Tem certeza que deseja excluir esta tabela de preços?')) {
+        if (window.confirm('Tem certeza que deseja excluir esta tabela de preços?')) {
             try {
                 await deleteDoc(doc(db, collectionRef.path, id));
             } catch (error) {
-                 console.error("Erro ao excluir tabela de preços: ", error);
+                console.error("Erro ao excluir tabela de preços: ", error);
             }
         }
     };
 
     return (
         <div className="animate-fade-in">
-             <header className="flex justify-between items-center mb-6">
+            <header className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-gray-800">Tabelas de Preços</h1>
                 <Button onClick={() => handleOpenModal()}>
                     <LucidePlusCircle size={20} />
@@ -1513,7 +1512,7 @@ const PriceTables = ({ userId, services, companyProfile }) => {
                                 </td>
                             </tr>
                         ))}
-                         {tables.length === 0 && (
+                        {tables.length === 0 && (
                             <tr>
                                 <td colSpan="3" className="text-center p-8 text-gray-500">Nenhuma tabela de preços encontrada.</td>
                             </tr>
@@ -1529,11 +1528,11 @@ const PriceTables = ({ userId, services, companyProfile }) => {
             )}
 
             {isViewModalOpen && (
-                <PriceTableViewModal 
-                    table={currentTable} 
-                    allServices={services} 
+                <PriceTableViewModal
+                    table={currentTable}
+                    allServices={services}
                     companyProfile={companyProfile}
-                    onClose={handleCloseModal} 
+                    onClose={handleCloseModal}
                 />
             )}
         </div>
@@ -1562,11 +1561,11 @@ const UserManagement = ({ userId }) => {
             alert("Falha ao atualizar o status.");
         }
     };
-    
+
     return (
         <div className="animate-fade-in">
             <h1 className="text-3xl font-bold text-gray-800 mb-6">Gestão de Utilizadores</h1>
-             <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-md overflow-hidden">
                 <table className="w-full text-sm text-left text-gray-500">
                     <thead className="text-xs text-gray-700 uppercase bg-gray-100">
                         <tr>
@@ -1582,11 +1581,10 @@ const UserManagement = ({ userId }) => {
                                 <td className="px-6 py-4 font-medium text-gray-900">{user.email}</td>
                                 <td className="px-6 py-4">{user.createdAt?.toDate().toLocaleDateString('pt-BR') || 'N/A'}</td>
                                 <td className="px-6 py-4">
-                                     <span className={`px-3 py-1 text-sm font-medium rounded-full ${
-                                        user.status === 'approved' ? 'bg-green-100 text-green-800' :
-                                        user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                        'bg-red-100 text-red-800'
-                                    }`}>{user.status === 'approved' ? 'Aprovado' : 'Pendente'}</span>
+                                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${user.status === 'approved' ? 'bg-green-100 text-green-800' :
+                                            user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                                'bg-red-100 text-red-800'
+                                        }`}>{user.status === 'approved' ? 'Aprovado' : 'Pendente'}</span>
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                     {user.status === 'pending' && (
@@ -1594,7 +1592,7 @@ const UserManagement = ({ userId }) => {
                                             Aprovar
                                         </Button>
                                     )}
-                                     {user.status === 'approved' && user.role !== 'admin' && (
+                                    {user.status === 'approved' && user.role !== 'admin' && (
                                         <Button onClick={() => handleStatusChange(user.id, 'pending')} variant="secondary">
                                             Revogar Acesso
                                         </Button>
@@ -1630,15 +1628,15 @@ const PaymentForm = ({ onSubmit, payment }) => {
             <Input label="Descrição" value={description} onChange={e => setDescription(e.target.value)} required />
             <Input label="Valor (R$)" type="number" value={amount} onChange={e => setAmount(e.target.value)} required step="0.01" />
             <div>
-                 <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                 <select id="category" value={category} onChange={e => setCategory(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg">
+                <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+                <select id="category" value={category} onChange={e => setCategory(e.target.value)} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg">
                     <option>Materiais</option>
                     <option>Salários</option>
                     <option>Fornecedores (Dentais)</option>
                     <option>Contas (Água, Luz, etc.)</option>
                     <option>Impostos</option>
                     <option>Outros</option>
-                 </select>
+                </select>
             </div>
             <Input label="Data do Pagamento" type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required />
             <div className="flex justify-end gap-3 pt-4">
@@ -1653,10 +1651,10 @@ const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
 
     const numberToWords = (num) => {
         if (num === null || num === undefined) return 'zero reais';
-        const a = ['','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','catorze','quinze','dezesseis','dezessete','dezoito','dezenove'];
-        const b = ['', '', 'vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
+        const a = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'catorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+        const b = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
         const c = ['', 'cem', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
-        
+
         const n = parseFloat(num).toFixed(2).split('.');
         let a_part = parseInt(n[0]);
         let b_part = parseInt(n[1]);
@@ -1668,7 +1666,7 @@ const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
         if (b_part > 0) {
             str += (a_part > 0 ? ' e ' : '') + `${process(b_part)} centavos`;
         }
-        
+
         if (str === '') return 'zero reais';
         return str.trim();
 
@@ -1677,13 +1675,13 @@ const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
             if (number < 20) return a[number];
             if (n_str.length === 2) return b[n_str[0]] + (n_str[1] !== '0' ? ' e ' + a[n_str[1]] : '');
             if (n_str.length === 3) {
-                 if (n_str === '100') return 'cem';
-                 return c[n_str[0]] + (n_str.substring(1) !== '00' ? ' e ' + process(parseInt(n_str.substring(1))) : '');
+                if (n_str === '100') return 'cem';
+                return c[n_str[0]] + (n_str.substring(1) !== '00' ? ' e ' + process(parseInt(n_str.substring(1))) : '');
             }
             return '';
         }
     };
-    
+
     const generatePdf = (action = 'print') => {
         const input = receiptRef.current;
         if (!input || !window.html2canvas || !window.jspdf) return;
@@ -1731,7 +1729,7 @@ const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
                                 referente aos serviços de prótese dentária detalhados abaixo.
                             </p>
                         </div>
-                        
+
                         <h3 className="font-bold mb-2 border-b pb-1">DETALHAMENTO DOS SERVIÇOS</h3>
                         <table className="w-full text-sm">
                             <thead>
@@ -1743,7 +1741,7 @@ const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {(receiptData?.orders || []).flatMap(order => order.services.map(service => ({...service, order}))).map((item, index) => (
+                                {(receiptData?.orders || []).flatMap(order => order.services.map(service => ({ ...service, order }))).map((item, index) => (
                                     <tr key={index} className="border-b">
                                         <td className="p-2">{item.name} (O.S. #{item.order.number} / {item.order.patientName})</td>
                                         <td className="p-2 text-center">{item.quantity || 1}</td>
@@ -1771,8 +1769,8 @@ const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
                 </div>
             </div>
             <div className="flex justify-end gap-2 p-4 border-t bg-gray-50">
-                <Button onClick={() => generatePdf('save')} variant="secondary"><LucideFileDown size={18}/> Salvar PDF</Button>
-                <Button onClick={() => generatePdf('print')}><LucidePrinter size={18}/> Imprimir</Button>
+                <Button onClick={() => generatePdf('save')} variant="secondary"><LucideFileDown size={18} /> Salvar PDF</Button>
+                <Button onClick={() => generatePdf('print')}><LucidePrinter size={18} /> Imprimir</Button>
             </div>
         </Modal>
     );
@@ -1825,7 +1823,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
             alert("Falha ao salvar pagamento.");
         }
     };
-    
+
     const handleDeletePayment = async (paymentId) => {
         if (!userId) return;
         if (window.confirm('Tem certeza que deseja excluir este pagamento?')) {
@@ -1838,7 +1836,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
             }
         }
     };
-    
+
     const markOrderAsPaid = async (order, isPaid) => {
         if (!userId) return;
         const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, order.id);
@@ -1851,7 +1849,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
 
     const handleReceiveFromClient = async (clientData) => {
         if (!userId || !clientData.orders || clientData.orders.length === 0) return;
-        
+
         if (!window.confirm(`Confirma o recebimento de R$ ${clientData.totalDue.toFixed(2)} para ${clientData.clientName}?`)) {
             return;
         }
@@ -1865,7 +1863,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
             const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, order.id);
             batch.update(docRef, { isPaid: true });
         });
-        
+
         try {
             await batch.commit();
             alert(`Recebimento do cliente ${clientData.clientName} registrado com sucesso.`);
@@ -1896,13 +1894,13 @@ const Financials = ({ userId, orders, companyProfile }) => {
     const balance = totalReceived - totalPaid;
 
     const renderContent = () => {
-        switch(activeTab) {
+        switch (activeTab) {
             case 'payments':
                 return (
-                     <div>
+                    <div>
                         <div className="flex justify-between items-center mb-4">
-                           <h3 className="text-xl font-bold text-gray-700">Pagamentos (Contas a Pagar)</h3>
-                           <Button onClick={() => handleOpenPaymentModal()}><LucidePlusCircle size={18}/> Novo Pagamento</Button>
+                            <h3 className="text-xl font-bold text-gray-700">Pagamentos (Contas a Pagar)</h3>
+                            <Button onClick={() => handleOpenPaymentModal()}><LucidePlusCircle size={18} /> Novo Pagamento</Button>
                         </div>
                         <div className="bg-white rounded-2xl shadow-md p-4">
                             {payments.length > 0 ? payments.map(p => (
@@ -1911,13 +1909,13 @@ const Financials = ({ userId, orders, companyProfile }) => {
                                     <span className="text-sm text-gray-500">{p.category}</span>
                                     <span className="font-bold text-red-600 text-right">- R$ {p.amount.toFixed(2)}</span>
                                     <div className="flex justify-end gap-2">
-                                       <button onClick={() => handleOpenPaymentModal(p)} title="Editar" className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><LucideEdit size={18}/></button>
-                                       <button onClick={() => handleDeletePayment(p.id)} title="Excluir" className="p-2 text-red-600 hover:bg-red-100 rounded-full"><LucideTrash2 size={18}/></button>
+                                        <button onClick={() => handleOpenPaymentModal(p)} title="Editar" className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><LucideEdit size={18} /></button>
+                                        <button onClick={() => handleDeletePayment(p.id)} title="Excluir" className="p-2 text-red-600 hover:bg-red-100 rounded-full"><LucideTrash2 size={18} /></button>
                                     </div>
                                 </div>
                             )) : <p className="text-gray-500 text-center py-4">Nenhum pagamento registrado.</p>}
                         </div>
-                     </div>
+                    </div>
                 );
 
             case 'receivables':
@@ -1937,17 +1935,17 @@ const Financials = ({ userId, orders, companyProfile }) => {
                     }, {});
 
                 const paidByClient = receivedOrders.reduce((acc, order) => {
-                     if (!acc[order.clientId]) {
-                         acc[order.clientId] = {
-                             clientName: order.clientName,
-                             totalPaid: 0,
-                             paidOrders: []
-                         };
-                     }
-                     acc[order.clientId].totalPaid += order.totalValue;
-                     acc[order.clientId].paidOrders.push(order);
-                     return acc;
-                 }, {});
+                    if (!acc[order.clientId]) {
+                        acc[order.clientId] = {
+                            clientName: order.clientName,
+                            totalPaid: 0,
+                            paidOrders: []
+                        };
+                    }
+                    acc[order.clientId].totalPaid += order.totalValue;
+                    acc[order.clientId].paidOrders.push(order);
+                    return acc;
+                }, {});
 
                 return (
                     <div className="space-y-8">
@@ -1966,44 +1964,44 @@ const Financials = ({ userId, orders, companyProfile }) => {
                             </div>
                         </div>
 
-                         <div>
-                             <h3 className="text-xl font-bold text-gray-700 mb-4">Histórico de Recebimentos (por Cliente)</h3>
-                             <div className="bg-white rounded-2xl shadow-md p-4 space-y-1">
-                                 {Object.keys(paidByClient).length > 0 ? Object.values(paidByClient).sort((a,b) => a.clientName.localeCompare(b.clientName)).map((client, idx) => (
+                        <div>
+                            <h3 className="text-xl font-bold text-gray-700 mb-4">Histórico de Recebimentos (por Cliente)</h3>
+                            <div className="bg-white rounded-2xl shadow-md p-4 space-y-1">
+                                {Object.keys(paidByClient).length > 0 ? Object.values(paidByClient).sort((a, b) => a.clientName.localeCompare(b.clientName)).map((client, idx) => (
                                     <div key={idx} className="border rounded-lg overflow-hidden">
-                                        <button 
-                                            onClick={() => setExpandedClient(expandedClient === client.clientName ? null : client.clientName)} 
+                                        <button
+                                            onClick={() => setExpandedClient(expandedClient === client.clientName ? null : client.clientName)}
                                             className="w-full flex justify-between items-center p-4 bg-gray-50 hover:bg-gray-100"
                                         >
-                                           <div>
+                                            <div>
                                                 <p className="font-semibold text-gray-800">{client.clientName}</p>
                                                 <p className="text-sm text-green-600">Total recebido: <span className="font-bold">R$ {client.totalPaid.toFixed(2)}</span></p>
-                                           </div>
+                                            </div>
                                             <LucideChevronDown className={`transition-transform ${expandedClient === client.clientName ? 'rotate-180' : ''}`} />
                                         </button>
                                         {expandedClient === client.clientName && (
                                             <div className="p-4 bg-white">
-                                                {client.paidOrders.sort((a,b) => new Date(b.completionDate) - new Date(a.completionDate)).map(order => (
+                                                {client.paidOrders.sort((a, b) => new Date(b.completionDate) - new Date(a.completionDate)).map(order => (
                                                     <div key={order.id} className="flex justify-between items-center py-2 border-b last:border-b-0">
-                                                         <div>
+                                                        <div>
                                                             <p>O.S. #{order.number} - R$ {order.totalValue.toFixed(2)}</p>
                                                             <p className="text-sm text-gray-500">Concluído em: {new Date(order.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
-                                                         </div>
-                                                         <div className="flex items-center gap-2">
-                                                             <Button onClick={() => markOrderAsPaid(order, false)} variant="secondary" className="text-xs">Desfazer</Button>
-                                                         </div>
-                                                     </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <Button onClick={() => markOrderAsPaid(order, false)} variant="secondary" className="text-xs">Desfazer</Button>
+                                                        </div>
+                                                    </div>
                                                 ))}
                                             </div>
                                         )}
-                                     </div>
-                                 )) : <p className="text-gray-500 text-center py-4">Nenhum recebimento registrado.</p>}
-                             </div>
-                         </div>
+                                    </div>
+                                )) : <p className="text-gray-500 text-center py-4">Nenhum recebimento registrado.</p>}
+                            </div>
+                        </div>
                     </div>
                 );
             default: // summary
-                 return (
+                return (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <StatCard icon={<LucideDollarSign size={40} className="text-green-500" />} label="Total Recebido (O.S. Pagas)" value={`R$ ${totalReceived.toFixed(2)}`} color="border-green-500" />
@@ -2011,7 +2009,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
                             <StatCard icon={<LucideDollarSign size={40} className={balance >= 0 ? "text-blue-500" : "text-gray-500"} />} label="Saldo (Recebido - Pago)" value={`R$ ${balance.toFixed(2)}`} color={balance >= 0 ? "border-blue-500" : "border-gray-500"} />
                         </div>
                     </div>
-                 );
+                );
         }
     };
 
@@ -2027,7 +2025,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
                         <button onClick={() => setActiveTab('receivables')} className={`${activeTab === 'receivables' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
                             Recebimentos
                         </button>
-                         <button onClick={() => setActiveTab('payments')} className={`${activeTab === 'payments' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
+                        <button onClick={() => setActiveTab('payments')} className={`${activeTab === 'payments' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
                             Pagamentos
                         </button>
                     </nav>
@@ -2037,13 +2035,13 @@ const Financials = ({ userId, orders, companyProfile }) => {
             {renderContent()}
 
             {isPaymentModalOpen && (
-                 <Modal onClose={handleClosePaymentModal} title={currentPayment ? "Editar Pagamento" : "Novo Pagamento"}>
+                <Modal onClose={handleClosePaymentModal} title={currentPayment ? "Editar Pagamento" : "Novo Pagamento"}>
                     <PaymentForm onSubmit={handleSavePayment} payment={currentPayment} />
                 </Modal>
             )}
             {isReceiptModalOpen && (
-                <ReceiptModal 
-                    receiptData={dataForReceipt} 
+                <ReceiptModal
+                    receiptData={dataForReceipt}
                     companyProfile={companyProfile}
                     onClose={handleCloseReceiptModal}
                 />
@@ -2221,12 +2219,12 @@ const AppLayout = ({ user, userProfile }) => {
             return onSnapshot(q, (snapshot) => {
                 const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 if (name === 'serviceOrders') {
-                    data.sort((a,b) => (b.number || 0) - (a.number || 0));
+                    data.sort((a, b) => (b.number || 0) - (a.number || 0));
                 }
                 setter(data);
             });
         });
-        
+
         const companyProfileDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/companyProfile/main`);
         const companyUnsub = onSnapshot(companyProfileDocRef, (doc) => {
             setCompanyProfile(doc.data());
@@ -2249,116 +2247,116 @@ const AppLayout = ({ user, userProfile }) => {
             case 'dashboard':
                 return <Dashboard setActivePage={setActivePage} serviceOrders={serviceOrders} inventory={inventory} />;
             case 'clients':
-                 return <ManageGeneric
-                     collectionName="clients"
-                     title="Clientes"
-                     fields={[
-                         { name: 'name', label: 'Nome Completo', type: 'text', required: true },
-                         { name: 'document', label: 'CPF/CNPJ', type: 'text' },
-                         { name: 'address', label: 'Endereço', type: 'text' },
-                         { name: 'phone', label: 'Telefone / WhatsApp', type: 'tel' },
-                         { name: 'email', label: 'Email', type: 'email' },
-                         { name: 'priceTableId', label: 'Tabela de Preço', type: 'select', optionsKey: 'priceTables', placeholder: 'Padrão' },
-                         { name: 'notes', label: 'Observações', type: 'textarea' },
-                     ]}
-                     customProps={{ priceTables }}
-                     renderItem={(items, onEdit, onDelete) => (
-                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                return <ManageGeneric
+                    collectionName="clients"
+                    title="Clientes"
+                    fields={[
+                        { name: 'name', label: 'Nome Completo', type: 'text', required: true },
+                        { name: 'document', label: 'CPF/CNPJ', type: 'text' },
+                        { name: 'address', label: 'Endereço', type: 'text' },
+                        { name: 'phone', label: 'Telefone / WhatsApp', type: 'tel' },
+                        { name: 'email', label: 'Email', type: 'email' },
+                        { name: 'priceTableId', label: 'Tabela de Preço', type: 'select', optionsKey: 'priceTables', placeholder: 'Padrão' },
+                        { name: 'notes', label: 'Observações', type: 'textarea' },
+                    ]}
+                    customProps={{ priceTables }}
+                    renderItem={(items, onEdit, onDelete) => (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
                             {items.map(item => (
                                 <div key={item.id} className="bg-gray-50 rounded-lg p-4 shadow-sm border border-gray-200 flex flex-col justify-between">
-                                  <div>
-                                      <h3 className="font-bold text-lg text-gray-800">{item.name}</h3>
-                                      <p className="text-sm text-gray-500">{item.phone}</p>
-                                      <p className="text-sm text-gray-500 truncate">{priceTables.find(pt => pt.id === item.priceTableId)?.name || 'Preço Padrão'}</p>
-                                  </div>
-                                  <div className="flex justify-end gap-2 mt-4">
-                                      <button onClick={() => onEdit(item)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><LucideEdit size={18}/></button>
-                                      <button onClick={() => onDelete(item.id)} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><LucideTrash2 size={18}/></button>
-                                  </div>
+                                    <div>
+                                        <h3 className="font-bold text-lg text-gray-800">{item.name}</h3>
+                                        <p className="text-sm text-gray-500">{item.phone}</p>
+                                        <p className="text-sm text-gray-500 truncate">{priceTables.find(pt => pt.id === item.priceTableId)?.name || 'Preço Padrão'}</p>
+                                    </div>
+                                    <div className="flex justify-end gap-2 mt-4">
+                                        <button onClick={() => onEdit(item)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><LucideEdit size={18} /></button>
+                                        <button onClick={() => onDelete(item.id)} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><LucideTrash2 size={18} /></button>
+                                    </div>
                                 </div>
                             ))}
-                         </div>
-                     )}
-                 />;
+                        </div>
+                    )}
+                />;
             case 'employees':
-                 return <ManageGeneric
-                     collectionName="employees"
-                     title="Funcionários"
-                     fields={[
-                         { name: 'name', label: 'Nome Completo', type: 'text', required: true },
-                         { name: 'role', label: 'Função / Cargo', type: 'text' },
-                         { name: 'phone', label: 'Telefone', type: 'tel' },
-                         { name: 'email', label: 'Email', type: 'email' },
-                         { name: 'commission', label: 'Comissão Padrão (%)', type: 'number', required: true },
-                     ]}
-                      renderItem={(items, onEdit, onDelete) => (
-                         <table className="w-full text-sm text-left text-gray-500">
-                             <thead className="text-xs text-gray-700 uppercase bg-gray-100">
-                                 <tr>
-                                     <th scope="col" className="px-6 py-3">Nome</th>
-                                     <th scope="col" className="px-6 py-3">Cargo</th>
-                                     <th scope="col" className="px-6 py-3">Comissão Padrão</th>
-                                     <th scope="col" className="px-6 py-3 text-center">Ações</th>
-                                 </tr>
-                             </thead>
-                             <tbody>
-                                 {items.map(item => (
-                                     <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
-                                         <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
-                                         <td className="px-6 py-4">{item.role}</td>
-                                         <td className="px-6 py-4">{item.commission}%</td>
-                                         <td className="px-6 py-4 text-center">
-                                             <div className="flex justify-center items-center gap-2">
-                                                 <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
-                                                 <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
-                                             </div>
-                                         </td>
-                                     </tr>
-                                 ))}
-                             </tbody>
-                         </table>
-                     )}
-                 />;
+                return <ManageGeneric
+                    collectionName="employees"
+                    title="Funcionários"
+                    fields={[
+                        { name: 'name', label: 'Nome Completo', type: 'text', required: true },
+                        { name: 'role', label: 'Função / Cargo', type: 'text' },
+                        { name: 'phone', label: 'Telefone', type: 'tel' },
+                        { name: 'email', label: 'Email', type: 'email' },
+                        { name: 'commission', label: 'Comissão Padrão (%)', type: 'number', required: true },
+                    ]}
+                    renderItem={(items, onEdit, onDelete) => (
+                        <table className="w-full text-sm text-left text-gray-500">
+                            <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3">Nome</th>
+                                    <th scope="col" className="px-6 py-3">Cargo</th>
+                                    <th scope="col" className="px-6 py-3">Comissão Padrão</th>
+                                    <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {items.map(item => (
+                                    <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
+                                        <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
+                                        <td className="px-6 py-4">{item.role}</td>
+                                        <td className="px-6 py-4">{item.commission}%</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="flex justify-center items-center gap-2">
+                                                <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
+                                                <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                />;
             case 'suppliers':
-                 return <ManageGeneric
-                     collectionName="suppliers"
-                     title="Fornecedores"
-                     fields={[
-                         { name: 'name', label: 'Nome do Fornecedor', type: 'text', required: true },
-                         { name: 'phone', label: 'Telefone / WhatsApp', type: 'tel' },
-                         { name: 'email', label: 'Email', type: 'email' },
-                         { name: 'notes', label: 'Observações / Produtos', type: 'textarea' }
-                     ]}
-                      renderItem={(items, onEdit, onDelete) => (
-                         <table className="w-full text-sm text-left text-gray-500">
-                             <thead className="text-xs text-gray-700 uppercase bg-gray-100">
-                                 <tr>
-                                     <th scope="col" className="px-6 py-3">Nome</th>
-                                     <th scope="col" className="px-6 py-3">Telefone</th>
-                                     <th scope="col" className="px-6 py-3">Email</th>
-                                     <th scope="col" className="px-6 py-3 text-center">Ações</th>
-                                 </tr>
-                             </thead>
-                             <tbody>
-                                 {items.map(item => (
-                                     <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
-                                         <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
-                                         <td className="px-6 py-4">{item.phone}</td>
-                                         <td className="px-6 py-4">{item.email}</td>
-                                         <td className="px-6 py-4 text-center">
-                                             <div className="flex justify-center items-center gap-2">
-                                                 <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
-                                                 <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
-                                             </div>
-                                         </td>
-                                     </tr>
-                                 ))}
-                             </tbody>
-                         </table>
-                     )}
-                 />;
+                return <ManageGeneric
+                    collectionName="suppliers"
+                    title="Fornecedores"
+                    fields={[
+                        { name: 'name', label: 'Nome do Fornecedor', type: 'text', required: true },
+                        { name: 'phone', label: 'Telefone / WhatsApp', type: 'tel' },
+                        { name: 'email', label: 'Email', type: 'email' },
+                        { name: 'notes', label: 'Observações / Produtos', type: 'textarea' }
+                    ]}
+                    renderItem={(items, onEdit, onDelete) => (
+                        <table className="w-full text-sm text-left text-gray-500">
+                            <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3">Nome</th>
+                                    <th scope="col" className="px-6 py-3">Telefone</th>
+                                    <th scope="col" className="px-6 py-3">Email</th>
+                                    <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {items.map(item => (
+                                    <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
+                                        <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
+                                        <td className="px-6 py-4">{item.phone}</td>
+                                        <td className="px-6 py-4">{item.email}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="flex justify-center items-center gap-2">
+                                                <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
+                                                <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                />;
             case 'services':
-                 const groupedServices = services.reduce((acc, service) => {
+                const groupedServices = services.reduce((acc, service) => {
                     const material = service.material || 'Sem Material';
                     if (!acc[material]) {
                         acc[material] = [];
@@ -2367,85 +2365,85 @@ const AppLayout = ({ user, userProfile }) => {
                     return acc;
                 }, {});
 
-                 return <ManageGeneric
-                     collectionName="services"
-                     title="Serviços (Preços Padrão)"
-                     fields={[
-                         { name: 'name', label: 'Nome do Serviço', type: 'text', required: true },
-                         { name: 'material', label: 'Material (Ex: Zircônia, E-max)', type: 'text', required: true },
-                         { name: 'price', label: 'Valor Padrão (R$)', type: 'number', required: true },
-                         { name: 'description', label: 'Descrição', type: 'textarea' },
-                     ]}
-                     renderItem={(items, onEdit, onDelete) => (
-                          <div className="space-y-4 p-4">
+                return <ManageGeneric
+                    collectionName="services"
+                    title="Serviços (Preços Padrão)"
+                    fields={[
+                        { name: 'name', label: 'Nome do Serviço', type: 'text', required: true },
+                        { name: 'material', label: 'Material (Ex: Zircônia, E-max)', type: 'text', required: true },
+                        { name: 'price', label: 'Valor Padrão (R$)', type: 'number', required: true },
+                        { name: 'description', label: 'Descrição', type: 'textarea' },
+                    ]}
+                    renderItem={(items, onEdit, onDelete) => (
+                        <div className="space-y-4 p-4">
                             {Object.keys(groupedServices).sort().map(material => (
                                 <div key={material} className="bg-white rounded-lg shadow-md border border-gray-200">
                                     <h3 className="px-6 py-3 text-lg font-bold text-gray-700 bg-gray-100 rounded-t-lg">{material}</h3>
                                     <table className="w-full text-sm text-left text-gray-500">
-                                      <tbody>
-                                        {groupedServices[material].map(item => (
-                                            <tr key={item.id} className="border-b last:border-b-0 hover:bg-gray-50">
-                                                <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
-                                                <td className="px-6 py-4 text-right font-semibold">R$ {item.price?.toFixed(2)}</td>
-                                                <td className="px-6 py-4 text-center w-32">
-                                                    <div className="flex justify-center items-center gap-2">
-                                                        <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
-                                                        <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                      </tbody>
+                                        <tbody>
+                                            {groupedServices[material].map(item => (
+                                                <tr key={item.id} className="border-b last:border-b-0 hover:bg-gray-50">
+                                                    <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
+                                                    <td className="px-6 py-4 text-right font-semibold">R$ {item.price?.toFixed(2)}</td>
+                                                    <td className="px-6 py-4 text-center w-32">
+                                                        <div className="flex justify-center items-center gap-2">
+                                                            <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
+                                                            <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
                                     </table>
                                 </div>
                             ))}
-                          </div>
-                      )}
-                 />;
+                        </div>
+                    )}
+                />;
             case 'inventory':
-                 return <ManageGeneric
-                     collectionName="inventory"
-                     title="Controle de Estoque"
-                     fields={[
-                         { name: 'itemName', label: 'Nome do Item', type: 'text', required: true },
-                         { name: 'supplier', label: 'Fornecedor (Opcional)', type: 'text' },
-                         { name: 'quantity', label: 'Quantidade Atual', type: 'number', required: true },
-                         { name: 'unit', label: 'Unidade (un, g, ml, etc.)', type: 'text', required: true },
-                         { name: 'lowStockThreshold', label: 'Alerta de Estoque Baixo', type: 'number', required: true }
-                     ]}
-                     renderItem={(items, onEdit, onDelete) => (
-                         <table className="w-full text-sm text-left text-gray-500">
-                             <thead className="text-xs text-gray-700 uppercase bg-gray-100">
-                                 <tr>
-                                     <th scope="col" className="px-6 py-3">Item</th>
-                                     <th scope="col" className="px-6 py-3">Fornecedor</th>
-                                     <th scope="col" className="px-6 py-3">Quantidade</th>
-                                     <th scope="col" className="px-6 py-3 text-center">Ações</th>
-                                 </tr>
-                             </thead>
-                             <tbody>
-                                 {items.map(item => (
-                                     <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
-                                         <td className="px-6 py-4 font-medium text-gray-900 flex items-center gap-2">
-                                             {item.itemName}
-                                             {item.quantity <= item.lowStockThreshold && 
-                                                 <LucideAlertTriangle size={16} className="text-red-500" title="Estoque baixo!" />
-                                             }
-                                         </td>
-                                         <td className="px-6 py-4">{item.supplier}</td>
-                                         <td className="px-6 py-4">{item.quantity} {item.unit}</td>
-                                         <td className="px-6 py-4 text-center">
-                                             <div className="flex justify-center items-center gap-2">
-                                                 <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
-                                                 <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
-                                             </div>
-                                         </td>
-                                     </tr>
-                                 ))}
-                             </tbody>
-                         </table>
-                     )}
-                 />;
+                return <ManageGeneric
+                    collectionName="inventory"
+                    title="Controle de Estoque"
+                    fields={[
+                        { name: 'itemName', label: 'Nome do Item', type: 'text', required: true },
+                        { name: 'supplier', label: 'Fornecedor (Opcional)', type: 'text' },
+                        { name: 'quantity', label: 'Quantidade Atual', type: 'number', required: true },
+                        { name: 'unit', label: 'Unidade (un, g, ml, etc.)', type: 'text', required: true },
+                        { name: 'lowStockThreshold', label: 'Alerta de Estoque Baixo', type: 'number', required: true }
+                    ]}
+                    renderItem={(items, onEdit, onDelete) => (
+                        <table className="w-full text-sm text-left text-gray-500">
+                            <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3">Item</th>
+                                    <th scope="col" className="px-6 py-3">Fornecedor</th>
+                                    <th scope="col" className="px-6 py-3">Quantidade</th>
+                                    <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {items.map(item => (
+                                    <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
+                                        <td className="px-6 py-4 font-medium text-gray-900 flex items-center gap-2">
+                                            {item.itemName}
+                                            {item.quantity <= item.lowStockThreshold &&
+                                                <LucideAlertTriangle size={16} className="text-red-500" title="Estoque baixo!" />
+                                            }
+                                        </td>
+                                        <td className="px-6 py-4">{item.supplier}</td>
+                                        <td className="px-6 py-4">{item.quantity} {item.unit}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="flex justify-center items-center gap-2">
+                                                <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-900 p-1"><LucideEdit size={18} /></button>
+                                                <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><LucideTrash2 size={18} /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                />;
             case 'price-tables':
                 return <PriceTables userId={user.uid} services={services} companyProfile={companyProfile} />;
             case 'service-orders':
@@ -2468,11 +2466,10 @@ const AppLayout = ({ user, userProfile }) => {
             <a
                 href="#"
                 onClick={(e) => { e.preventDefault(); setActivePage(page); }}
-                className={`flex items-center p-3 text-base font-normal rounded-lg transition-all duration-200 ${
-                    activePage === page
+                className={`flex items-center p-3 text-base font-normal rounded-lg transition-all duration-200 ${activePage === page
                         ? 'bg-indigo-600 text-white shadow-lg'
                         : 'text-gray-600 hover:bg-gray-100'
-                }`}
+                    }`}
             >
                 {icon}
                 <span className="ml-3 flex-1 whitespace-nowrap">{label}</span>
