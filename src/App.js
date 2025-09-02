@@ -1781,9 +1781,14 @@ const Financials = ({ userId, orders, companyProfile }) => {
     const [payments, setPayments] = useState([]);
     const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
     const [currentPayment, setCurrentPayment] = useState(null);
-    const [expandedClient, setExpandedClient] = useState(null);
     const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
     const [dataForReceipt, setDataForReceipt] = useState(null);
+
+    // --- NOVO ---
+    // Controla qual cliente está com a lista de O.S. expandida
+    const [expandedClient, setExpandedClient] = useState(null);
+    // Controla quais O.S. estão selecionadas para pagamento
+    const [selectedOrders, setSelectedOrders] = useState({});
 
     useEffect(() => {
         if (!userId) return;
@@ -1823,7 +1828,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
             alert("Falha ao salvar pagamento.");
         }
     };
-
+    
     const handleDeletePayment = async (paymentId) => {
         if (!userId) return;
         if (window.confirm('Tem certeza que deseja excluir este pagamento?')) {
@@ -1836,7 +1841,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
             }
         }
     };
-
+    
     const markOrderAsPaid = async (order, isPaid) => {
         if (!userId) return;
         const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, order.id);
@@ -1846,11 +1851,41 @@ const Financials = ({ userId, orders, companyProfile }) => {
             console.error("Erro ao atualizar status de pagamento da O.S.:", error);
         }
     };
+    
+    // --- NOVO ---
+    // Função para lidar com a seleção (checkbox) de cada O.S.
+    const handleOrderSelection = (order, clientId) => {
+        setSelectedOrders(prevSelected => {
+            const currentSelection = prevSelected[clientId] || [];
+            const isAlreadySelected = currentSelection.some(o => o.id === order.id);
 
-    const handleReceiveFromClient = async (clientData) => {
-        if (!userId || !clientData.orders || clientData.orders.length === 0) return;
+            let newSelection;
+            if (isAlreadySelected) {
+                newSelection = currentSelection.filter(o => o.id !== order.id);
+            } else {
+                newSelection = [...currentSelection, order];
+            }
 
-        if (!window.confirm(`Confirma o recebimento de R$ ${clientData.totalDue.toFixed(2)} para ${clientData.clientName}?`)) {
+            return {
+                ...prevSelected,
+                [clientId]: newSelection
+            };
+        });
+    };
+    
+    // --- ALTERADO ---
+    // Função de recebimento agora processa apenas as O.S. selecionadas
+    const handleReceiveFromClient = async (clientId, clientName) => {
+        const ordersToPay = selectedOrders[clientId] || [];
+
+        if (ordersToPay.length === 0) {
+            alert("Nenhuma Ordem de Serviço foi selecionada para pagamento.");
+            return;
+        }
+
+        const totalToReceive = ordersToPay.reduce((sum, order) => sum + order.totalValue, 0);
+
+        if (!window.confirm(`Confirma o recebimento de R$ ${totalToReceive.toFixed(2)} para o cliente ${clientName}?`)) {
             return;
         }
 
@@ -1859,24 +1894,28 @@ const Financials = ({ userId, orders, companyProfile }) => {
         }
 
         const batch = writeBatch(db);
-        clientData.orders.forEach(order => {
+        ordersToPay.forEach(order => {
             const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, order.id);
             batch.update(docRef, { isPaid: true });
         });
-
+        
         try {
             await batch.commit();
-            alert(`Recebimento do cliente ${clientData.clientName} registrado com sucesso.`);
+            alert(`Recebimento de ${ordersToPay.length} O.S. do cliente ${clientName} registrado com sucesso.`);
 
             const receiptData = {
-                clientName: clientData.clientName,
-                clientDocument: clientData.orders[0]?.client?.document,
-                totalValue: clientData.totalDue,
-                orders: clientData.orders,
-                receiptNumber: clientData.orders.map(o => o.number).join(', ')
+                clientName: clientName,
+                clientDocument: ordersToPay[0]?.client?.document,
+                totalValue: totalToReceive,
+                orders: ordersToPay,
+                receiptNumber: ordersToPay.map(o => o.number).join(', ')
             };
             setDataForReceipt(receiptData);
             setIsReceiptModalOpen(true);
+            
+            // Limpa a seleção após o sucesso
+            setSelectedOrders(prev => ({...prev, [clientId]: []}));
+
         } catch (error) {
             console.error("Erro ao registrar recebimento em lote:", error);
             alert("Falha ao registrar o recebimento.");
@@ -1894,13 +1933,13 @@ const Financials = ({ userId, orders, companyProfile }) => {
     const balance = totalReceived - totalPaid;
 
     const renderContent = () => {
-        switch (activeTab) {
+        switch(activeTab) {
             case 'payments':
                 return (
-                    <div>
+                     <div>
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold text-gray-700">Pagamentos (Contas a Pagar)</h3>
-                            <Button onClick={() => handleOpenPaymentModal()}><LucidePlusCircle size={18} /> Novo Pagamento</Button>
+                           <h3 className="text-xl font-bold text-gray-700">Pagamentos (Contas a Pagar)</h3>
+                           <Button onClick={() => handleOpenPaymentModal()}><LucidePlusCircle size={18}/> Novo Pagamento</Button>
                         </div>
                         <div className="bg-white rounded-2xl shadow-md p-4">
                             {payments.length > 0 ? payments.map(p => (
@@ -1909,13 +1948,13 @@ const Financials = ({ userId, orders, companyProfile }) => {
                                     <span className="text-sm text-gray-500">{p.category}</span>
                                     <span className="font-bold text-red-600 text-right">- R$ {p.amount.toFixed(2)}</span>
                                     <div className="flex justify-end gap-2">
-                                        <button onClick={() => handleOpenPaymentModal(p)} title="Editar" className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><LucideEdit size={18} /></button>
-                                        <button onClick={() => handleDeletePayment(p.id)} title="Excluir" className="p-2 text-red-600 hover:bg-red-100 rounded-full"><LucideTrash2 size={18} /></button>
+                                       <button onClick={() => handleOpenPaymentModal(p)} title="Editar" className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><LucideEdit size={18}/></button>
+                                       <button onClick={() => handleDeletePayment(p.id)} title="Excluir" className="p-2 text-red-600 hover:bg-red-100 rounded-full"><LucideTrash2 size={18}/></button>
                                     </div>
                                 </div>
                             )) : <p className="text-gray-500 text-center py-4">Nenhum pagamento registrado.</p>}
                         </div>
-                    </div>
+                     </div>
                 );
 
             case 'receivables':
@@ -1925,6 +1964,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
                         if (!acc[order.clientId]) {
                             acc[order.clientId] = {
                                 clientName: order.clientName,
+                                clientId: order.clientId,
                                 totalDue: 0,
                                 orders: []
                             };
@@ -1934,74 +1974,69 @@ const Financials = ({ userId, orders, companyProfile }) => {
                         return acc;
                     }, {});
 
-                const paidByClient = receivedOrders.reduce((acc, order) => {
-                    if (!acc[order.clientId]) {
-                        acc[order.clientId] = {
-                            clientName: order.clientName,
-                            totalPaid: 0,
-                            paidOrders: []
-                        };
-                    }
-                    acc[order.clientId].totalPaid += order.totalValue;
-                    acc[order.clientId].paidOrders.push(order);
-                    return acc;
-                }, {});
-
                 return (
-                    <div className="space-y-8">
+                    <div className="space-y-4">
                         <div>
                             <h3 className="text-xl font-bold text-gray-700 mb-4">Contas a Receber (por Cliente)</h3>
-                            <div className="bg-white rounded-2xl shadow-md p-4 space-y-3">
-                                {Object.keys(unpaidByClient).length > 0 ? Object.values(unpaidByClient).map((client, idx) => (
-                                    <div key={idx} className="flex justify-between items-center p-3 border rounded-lg hover:bg-gray-50">
-                                        <div>
-                                            <p className="font-semibold text-gray-800">{client.clientName}</p>
-                                            <p className="text-sm text-red-600">Total a receber: <span className="font-bold">R$ {client.totalDue.toFixed(2)}</span> ({client.orders.length} O.S.)</p>
-                                        </div>
-                                        <Button onClick={() => handleReceiveFromClient(client)}>Registrar Recebimento Total</Button>
-                                    </div>
-                                )) : <p className="text-gray-500 text-center py-4">Nenhuma conta a receber pendente.</p>}
-                            </div>
-                        </div>
+                            <div className="bg-white rounded-2xl shadow-md p-4 space-y-2">
+                                {Object.keys(unpaidByClient).length > 0 ? Object.values(unpaidByClient).map(client => {
+                                    const isExpanded = expandedClient === client.clientId;
+                                    const clientSelection = selectedOrders[client.clientId] || [];
+                                    const selectedTotal = clientSelection.reduce((sum, order) => sum + order.totalValue, 0);
 
-                        <div>
-                            <h3 className="text-xl font-bold text-gray-700 mb-4">Histórico de Recebimentos (por Cliente)</h3>
-                            <div className="bg-white rounded-2xl shadow-md p-4 space-y-1">
-                                {Object.keys(paidByClient).length > 0 ? Object.values(paidByClient).sort((a, b) => a.clientName.localeCompare(b.clientName)).map((client, idx) => (
-                                    <div key={idx} className="border rounded-lg overflow-hidden">
-                                        <button
-                                            onClick={() => setExpandedClient(expandedClient === client.clientName ? null : client.clientName)}
-                                            className="w-full flex justify-between items-center p-4 bg-gray-50 hover:bg-gray-100"
-                                        >
-                                            <div>
-                                                <p className="font-semibold text-gray-800">{client.clientName}</p>
-                                                <p className="text-sm text-green-600">Total recebido: <span className="font-bold">R$ {client.totalPaid.toFixed(2)}</span></p>
-                                            </div>
-                                            <LucideChevronDown className={`transition-transform ${expandedClient === client.clientName ? 'rotate-180' : ''}`} />
-                                        </button>
-                                        {expandedClient === client.clientName && (
-                                            <div className="p-4 bg-white">
-                                                {client.paidOrders.sort((a, b) => new Date(b.completionDate) - new Date(a.completionDate)).map(order => (
-                                                    <div key={order.id} className="flex justify-between items-center py-2 border-b last:border-b-0">
-                                                        <div>
-                                                            <p>O.S. #{order.number} - R$ {order.totalValue.toFixed(2)}</p>
-                                                            <p className="text-sm text-gray-500">Concluído em: {new Date(order.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
+                                    return (
+                                        <div key={client.clientId} className="border rounded-lg overflow-hidden transition-all duration-300">
+                                            <button
+                                                onClick={() => setExpandedClient(isExpanded ? null : client.clientId)}
+                                                className="w-full flex justify-between items-center p-4 bg-gray-50 hover:bg-gray-100 text-left"
+                                            >
+                                                <div>
+                                                    <p className="font-semibold text-gray-800">{client.clientName}</p>
+                                                    <p className="text-sm text-red-600">Total a receber: <span className="font-bold">R$ {client.totalDue.toFixed(2)}</span> ({client.orders.length} O.S.)</p>
+                                                </div>
+                                                <LucideChevronDown className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                            </button>
+
+                                            {isExpanded && (
+                                                <div className="p-4 bg-white space-y-2">
+                                                    {client.orders.map(order => (
+                                                        <div key={order.id} className="flex items-center gap-3 p-2 border-b last:border-b-0">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                                                checked={clientSelection.some(o => o.id === order.id)}
+                                                                onChange={() => handleOrderSelection(order, client.clientId)}
+                                                            />
+                                                            <div className="flex-1">
+                                                                <p className="text-sm font-medium text-gray-800">O.S. #{order.number} ({order.patientName})</p>
+                                                                <p className="text-xs text-gray-500">Entrega: {new Date(order.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
+                                                            </div>
+                                                            <span className="text-sm font-semibold">R$ {order.totalValue.toFixed(2)}</span>
                                                         </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <Button onClick={() => markOrderAsPaid(order, false)} variant="secondary" className="text-xs">Desfazer</Button>
-                                                        </div>
+                                                    ))}
+                                                    <div className="pt-4 text-right">
+                                                        <p className="text-md font-bold text-gray-800">
+                                                            Total Selecionado: R$ {selectedTotal.toFixed(2)}
+                                                        </p>
+                                                        <Button 
+                                                            onClick={() => handleReceiveFromClient(client.clientId, client.clientName)} 
+                                                            disabled={clientSelection.length === 0}
+                                                            className="mt-2"
+                                                        >
+                                                            Registrar Pagamento ({clientSelection.length} O.S.)
+                                                        </Button>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )) : <p className="text-gray-500 text-center py-4">Nenhum recebimento registrado.</p>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                }) : <p className="text-gray-500 text-center py-4">Nenhuma conta a receber pendente.</p>}
                             </div>
                         </div>
                     </div>
                 );
             default: // summary
-                return (
+                 return (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <StatCard icon={<LucideDollarSign size={40} className="text-green-500" />} label="Total Recebido (O.S. Pagas)" value={`R$ ${totalReceived.toFixed(2)}`} color="border-green-500" />
@@ -2009,7 +2044,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
                             <StatCard icon={<LucideDollarSign size={40} className={balance >= 0 ? "text-blue-500" : "text-gray-500"} />} label="Saldo (Recebido - Pago)" value={`R$ ${balance.toFixed(2)}`} color={balance >= 0 ? "border-blue-500" : "border-gray-500"} />
                         </div>
                     </div>
-                );
+                 );
         }
     };
 
@@ -2025,7 +2060,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
                         <button onClick={() => setActiveTab('receivables')} className={`${activeTab === 'receivables' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
                             Recebimentos
                         </button>
-                        <button onClick={() => setActiveTab('payments')} className={`${activeTab === 'payments' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
+                         <button onClick={() => setActiveTab('payments')} className={`${activeTab === 'payments' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
                             Pagamentos
                         </button>
                     </nav>
@@ -2035,13 +2070,13 @@ const Financials = ({ userId, orders, companyProfile }) => {
             {renderContent()}
 
             {isPaymentModalOpen && (
-                <Modal onClose={handleClosePaymentModal} title={currentPayment ? "Editar Pagamento" : "Novo Pagamento"}>
+                 <Modal onClose={handleClosePaymentModal} title={currentPayment ? "Editar Pagamento" : "Novo Pagamento"}>
                     <PaymentForm onSubmit={handleSavePayment} payment={currentPayment} />
                 </Modal>
             )}
             {isReceiptModalOpen && (
-                <ReceiptModal
-                    receiptData={dataForReceipt}
+                <ReceiptModal 
+                    receiptData={dataForReceipt} 
                     companyProfile={companyProfile}
                     onClose={handleCloseReceiptModal}
                 />
