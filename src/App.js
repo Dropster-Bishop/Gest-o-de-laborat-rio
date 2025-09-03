@@ -1883,6 +1883,24 @@ const Financials = ({ userId, orders, companyProfile }) => {
         }
     };
 
+    // --- ALTERAÇÃO INICIA ---
+    const handleGenerateSecondCopy = (order) => {
+        if (!companyProfile?.companyName) {
+            alert('Atenção: Os dados da sua empresa não estão preenchidos na aba "Configurações". O recibo pode sair incompleto.');
+        }
+
+        const receiptData = {
+            clientName: order.clientName,
+            clientDocument: order.client?.document,
+            totalValue: order.totalValue,
+            orders: [order], // O recibo será para esta O.S. específica
+            receiptNumber: order.number.toString()
+        };
+        setDataForReceipt(receiptData);
+        setIsReceiptModalOpen(true);
+    };
+    // --- ALTERAÇÃO TERMINA ---
+
     const handleCloseReceiptModal = () => {
         setDataForReceipt(null);
         setIsReceiptModalOpen(false);
@@ -1987,9 +2005,14 @@ const Financials = ({ userId, orders, companyProfile }) => {
                                                             <p>O.S. #{order.number} - R$ {order.totalValue.toFixed(2)}</p>
                                                             <p className="text-sm text-gray-500">Concluído em: {new Date(order.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
                                                         </div>
+                                                        {/* --- ALTERAÇÃO INICIA --- */}
                                                         <div className="flex items-center gap-2">
+                                                            <Button onClick={() => handleGenerateSecondCopy(order)} variant="secondary" className="text-xs">
+                                                                <LucidePrinter size={14} /> 2ª Via
+                                                            </Button>
                                                             <Button onClick={() => markOrderAsPaid(order, false)} variant="secondary" className="text-xs">Desfazer</Button>
                                                         </div>
+                                                        {/* --- ALTERAÇÃO TERMINA --- */}
                                                     </div>
                                                 ))}
                                             </div>
