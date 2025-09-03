@@ -1649,38 +1649,76 @@ const PaymentForm = ({ onSubmit, payment }) => {
 const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
     const receiptRef = useRef();
 
+    // --- ALTERAÇÃO INICIA ---
+    // A função antiga foi completamente substituída por esta versão corrigida.
     const numberToWords = (num) => {
         if (num === null || num === undefined) return 'zero reais';
-        const a = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'catorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
-        const b = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
-        const c = ['', 'cem', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+        
+        num = parseFloat(num);
+        if (isNaN(num)) return 'zero reais';
 
-        const n = parseFloat(num).toFixed(2).split('.');
-        let a_part = parseInt(n[0]);
-        let b_part = parseInt(n[1]);
+        if (num === 0) return 'zero reais';
 
-        let str = '';
-        if (a_part === 1) str += 'um real';
-        else if (a_part > 1) str += `${process(a_part)} reais`;
+        const inteiro = Math.floor(num);
+        const centavos = Math.round((num - inteiro) * 100);
 
-        if (b_part > 0) {
-            str += (a_part > 0 ? ' e ' : '') + `${process(b_part)} centavos`;
-        }
+        const extenso = (n) => {
+            if (n === 0) return '';
+            
+            const unidades = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
+            const especiais = ['dez', 'onze', 'doze', 'treze', 'catorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+            const dezenas = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+            const centenas = ['', 'cem', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
 
-        if (str === '') return 'zero reais';
-        return str.trim();
-
-        function process(number) {
-            let n_str = number.toString();
-            if (number < 20) return a[number];
-            if (n_str.length === 2) return b[n_str[0]] + (n_str[1] !== '0' ? ' e ' + a[n_str[1]] : '');
-            if (n_str.length === 3) {
-                if (n_str === '100') return 'cem';
-                return c[n_str[0]] + (n_str.substring(1) !== '00' ? ' e ' + process(parseInt(n_str.substring(1))) : '');
+            if (n < 10) return unidades[n];
+            if (n < 20) return especiais[n - 10];
+            if (n < 100) {
+                return dezenas[Math.floor(n / 10)] + (n % 10 !== 0 ? ' e ' + unidades[n % 10] : '');
             }
-            return '';
+            if (n === 100) return 'cem';
+            if (n < 1000) {
+                // Usa 'cento' para números compostos (ex: cento e um)
+                return centenas[Math.floor(n / 100)].replace('cem', 'cento') + (n % 100 !== 0 ? ' e ' + extenso(n % 100) : '');
+            }
+            if (n < 1000000) {
+                const milhar = Math.floor(n / 1000);
+                const resto = n % 1000;
+                const milharStr = milhar === 1 ? 'mil' : extenso(milhar) + ' mil';
+                
+                if (resto === 0) return milharStr;
+                // Regra de conjunção: "mil e um", mas "mil duzentos"
+                if (resto < 100 || resto % 100 === 0) return milharStr + ' e ' + extenso(resto);
+                return milharStr + ' ' + extenso(resto);
+            }
+            // Adicionado para suportar milhões, pode ser estendido se necessário
+            if (n < 1000000000) {
+                const milhao = Math.floor(n / 1000000);
+                const resto = n % 1000000;
+                const milhaoStr = milhao === 1 ? 'um milhão' : extenso(milhao) + ' milhões';
+
+                if (resto === 0) return milhaoStr;
+                // Simplificando a conjunção para milhões
+                return milhaoStr + ' e ' + extenso(resto);
+            }
+
+            return ''; // Fora do escopo para valores maiores
+        };
+
+        let resultado = '';
+        if (inteiro > 0) {
+            resultado += extenso(inteiro) + (inteiro === 1 ? ' real' : ' reais');
         }
+
+        if (centavos > 0) {
+            if (inteiro > 0) {
+                resultado += ' e ';
+            }
+            resultado += extenso(centavos) + (centavos === 1 ? ' centavo' : ' centavos');
+        }
+        
+        return resultado.trim();
     };
+    // --- ALTERAÇÃO TERMINA ---
 
     const generatePdf = (action = 'print') => {
         const input = receiptRef.current;
