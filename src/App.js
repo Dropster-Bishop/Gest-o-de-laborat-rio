@@ -1884,17 +1884,18 @@ const Financials = ({ userId, orders, companyProfile }) => {
     };
 
     // --- ALTERAÇÃO INICIA ---
-    const handleGenerateSecondCopy = (order) => {
+    // A função agora recebe o objeto 'client' com todos os pedidos pagos
+    const handleGenerateSecondCopy = (clientData) => {
         if (!companyProfile?.companyName) {
             alert('Atenção: Os dados da sua empresa não estão preenchidos na aba "Configurações". O recibo pode sair incompleto.');
         }
 
         const receiptData = {
-            clientName: order.clientName,
-            clientDocument: order.client?.document,
-            totalValue: order.totalValue,
-            orders: [order], // O recibo será para esta O.S. específica
-            receiptNumber: order.number.toString()
+            clientName: clientData.clientName,
+            clientDocument: clientData.paidOrders[0]?.client?.document, // Pega o documento do primeiro pedido
+            totalValue: clientData.totalPaid, // Usa o total já pago
+            orders: clientData.paidOrders, // Inclui todos os pedidos pagos
+            receiptNumber: clientData.paidOrders.map(o => o.number).join(', ') // Junta todos os números de O.S.
         };
         setDataForReceipt(receiptData);
         setIsReceiptModalOpen(true);
@@ -1987,32 +1988,40 @@ const Financials = ({ userId, orders, companyProfile }) => {
                             <div className="bg-white rounded-2xl shadow-md p-4 space-y-1">
                                 {Object.keys(paidByClient).length > 0 ? Object.values(paidByClient).sort((a, b) => a.clientName.localeCompare(b.clientName)).map((client, idx) => (
                                     <div key={idx} className="border rounded-lg overflow-hidden">
-                                        <button
-                                            onClick={() => setExpandedClient(expandedClient === client.clientName ? null : client.clientName)}
-                                            className="w-full flex justify-between items-center p-4 bg-gray-50 hover:bg-gray-100"
-                                        >
-                                            <div>
+                                        <div className="w-full flex justify-between items-center p-4 bg-gray-50">
+                                            {/* --- ALTERAÇÃO INICIA --- */}
+                                            {/* O botão de expandir agora é separado para permitir o clique no botão de 2ª via */}
+                                            <div onClick={() => setExpandedClient(expandedClient === client.clientName ? null : client.clientName)} className="flex-grow cursor-pointer">
                                                 <p className="font-semibold text-gray-800">{client.clientName}</p>
                                                 <p className="text-sm text-green-600">Total recebido: <span className="font-bold">R$ {client.totalPaid.toFixed(2)}</span></p>
                                             </div>
-                                            <LucideChevronDown className={`transition-transform ${expandedClient === client.clientName ? 'rotate-180' : ''}`} />
-                                        </button>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    onClick={() => handleGenerateSecondCopy(client)}
+                                                    variant="secondary"
+                                                    className="text-xs"
+                                                    title="Gerar 2ª via do recibo consolidado"
+                                                >
+                                                    <LucidePrinter size={14} /> 2ª Via Recibo Total
+                                                </Button>
+                                                <button onClick={() => setExpandedClient(expandedClient === client.clientName ? null : client.clientName)} className="p-2">
+                                                    <LucideChevronDown className={`transition-transform ${expandedClient === client.clientName ? 'rotate-180' : ''}`} />
+                                                </button>
+                                            </div>
+                                            {/* --- ALTERAÇÃO TERMINA --- */}
+                                        </div>
                                         {expandedClient === client.clientName && (
                                             <div className="p-4 bg-white">
+                                                <h4 className="text-sm font-bold mb-2">Ordens de Serviço Inclusas:</h4>
                                                 {client.paidOrders.sort((a, b) => new Date(b.completionDate) - new Date(a.completionDate)).map(order => (
                                                     <div key={order.id} className="flex justify-between items-center py-2 border-b last:border-b-0">
                                                         <div>
                                                             <p>O.S. #{order.number} - R$ {order.totalValue.toFixed(2)}</p>
                                                             <p className="text-sm text-gray-500">Concluído em: {new Date(order.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
                                                         </div>
-                                                        {/* --- ALTERAÇÃO INICIA --- */}
                                                         <div className="flex items-center gap-2">
-                                                            <Button onClick={() => handleGenerateSecondCopy(order)} variant="secondary" className="text-xs">
-                                                                <LucidePrinter size={14} /> 2ª Via
-                                                            </Button>
                                                             <Button onClick={() => markOrderAsPaid(order, false)} variant="secondary" className="text-xs">Desfazer</Button>
                                                         </div>
-                                                        {/* --- ALTERAÇÃO TERMINA --- */}
                                                     </div>
                                                 ))}
                                             </div>
