@@ -1013,7 +1013,7 @@ const Reports = ({ orders, employees, clients }) => {
         commissionsByEmployee: 'Relatório de Comissões por Funcionário',
         ordersByClient: 'Relatório de Ordens por Cliente'
     };
-    // --- ALTERAÇÃO INICIA ---
+    
     const handleGenerateReport = () => {
         let data = [];
         if (reportType === 'completedByPeriod') {
@@ -1065,7 +1065,7 @@ const Reports = ({ orders, employees, clients }) => {
         }
         setResults(data);
     };
-    // --- ALTERAÇÃO TERMINA ---
+    
 
     const generateReportPdf = (action = 'print') => {
         const input = reportPrintRef.current;
@@ -1118,7 +1118,7 @@ const Reports = ({ orders, employees, clients }) => {
     const handlePrintReport = () => generateReportPdf('print');
     const handleSaveReportAsPdf = () => generateReportPdf('save');
 
-    // --- ALTERAÇÃO INICIA ---
+    
     const totalCommission = reportType === 'commissionsByEmployee'
         ? results.reduce((sum, order) => {
             const employeeCommission = order.assignedEmployees?.find(emp => emp.id === selectedEmployee)?.commissionValue || 0;
@@ -1127,7 +1127,7 @@ const Reports = ({ orders, employees, clients }) => {
         : 0;
 
     const totalValue = results.reduce((sum, order) => sum + order.totalValue, 0);
-    // --- ALTERAÇÃO TERMINA ---
+    
 
     const getReportSubTitle = () => {
         let period = '';
@@ -1208,16 +1208,18 @@ const Reports = ({ orders, employees, clients }) => {
                         <table className="w-full text-sm text-left text-gray-500">
                             <thead className="text-xs text-gray-700 uppercase bg-gray-100">
                                 <tr>
+                                    {/* --- ALTERAÇÃO INICIA --- */}
                                     <th scope="col" className="px-6 py-3">Nº O.S.</th>
                                     <th scope="col" className="px-6 py-3">Cliente</th>
+                                    <th scope="col" className="px-6 py-3">Paciente</th>
                                     <th scope="col" className="px-6 py-3">Data</th>
-                                    <th scope="col" className="px-6 py-3">Responsável(eis)</th>
                                     <th scope="col" className="px-6 py-3 text-right">Valor Total</th>
+                                    {/* --- ALTERAÇÃO TERMINA --- */}
                                     {reportType === 'commissionsByEmployee' && <th scope="col" className="px-6 py-3 text-right">Comissão</th>}
                                 </tr>
                             </thead>
                             <tbody>
-                                {/* --- ALTERAÇÃO INICIA --- */}
+                                
                                 {results.map(order => {
                                     const employeeCommission = reportType === 'commissionsByEmployee'
                                         ? order.assignedEmployees?.find(emp => emp.id === selectedEmployee)?.commissionValue || 0
@@ -1225,18 +1227,20 @@ const Reports = ({ orders, employees, clients }) => {
 
                                     return (
                                         <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
+                                            {/* --- ALTERAÇÃO INICIA --- */}
                                             <td className="px-6 py-4 font-medium">#{order.number}</td>
                                             <td className="px-6 py-4">{order.clientName}</td>
+                                            <td className="px-6 py-4">{order.patientName}</td>
                                             <td className="px-6 py-4">{new Date(reportType === 'completedByPeriod' || reportType === 'commissionsByEmployee' ? order.completionDate : order.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                                            <td className="px-6 py-4">{order.employeeName}</td>
                                             <td className="px-6 py-4 text-right font-bold">R$ {order.totalValue.toFixed(2)}</td>
+                                            {/* --- ALTERAÇÃO TERMINA --- */}
                                             {reportType === 'commissionsByEmployee' && (
                                                 <td className="px-6 py-4 text-right">R$ {employeeCommission.toFixed(2)}</td>
                                             )}
                                         </tr>
                                     );
                                 })}
-                                {/* --- ALTERAÇÃO TERMINA --- */}
+                                
                             </tbody>
                             <tfoot className="font-bold bg-gray-100">
                                 <tr>
