@@ -462,6 +462,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         setEditingService(null);
     };
 
+// Localize esta função dentro do componente OrderFormModal
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!userId) return;
@@ -485,17 +487,29 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
 
         const totalCommissionValue = finalAssignedEmployees.reduce((sum, emp) => sum + emp.commissionValue, 0);
 
+        // --- ALTERAÇÃO INICIA ---
+        // Lógica aprimorada para garantir a data de conclusão
+        const status = formRef.current.status.value;
+        let completionDateValue = formRef.current.completionDate.value || null;
+
+        // Se o status for 'Concluído' e a data de conclusão não foi preenchida,
+        // define a data de hoje automaticamente para garantir consistência nos relatórios.
+        if (status === 'Concluído' && !completionDateValue) {
+            completionDateValue = new Date().toISOString().split('T')[0];
+        }
+        // --- ALTERAÇÃO TERMINA ---
+
         const orderData = {
             clientId: client.id, clientName: client.name, client: client,
             patientName: formRef.current.patientName.value,
-            // Main employee name field for quick display
             employeeName: finalAssignedEmployees.map(e => e.name).join(', '),
-            assignedEmployees: finalAssignedEmployees, // Array of employees with commissions
+            assignedEmployees: finalAssignedEmployees,
             openDate: formRef.current.openDate.value, deliveryDate: formRef.current.deliveryDate.value,
-            completionDate: formRef.current.completionDate.value || null, status: formRef.current.status.value,
+            completionDate: completionDateValue, // Usa o valor corrigido
+            status: status, // Usa o valor corrigido
             services: finalServices,
             totalValue: finalTotalValue,
-            commissionValue: totalCommissionValue, // Total commission
+            commissionValue: totalCommissionValue,
             observations: formRef.current.observations.value,
             isPaid: order ? order.isPaid : false,
             updatedAt: serverTimestamp()
