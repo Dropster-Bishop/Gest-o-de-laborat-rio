@@ -1014,16 +1014,34 @@ const Reports = ({ orders, employees, clients }) => {
         ordersByClient: 'Relatório de Ordens por Cliente'
     };
     
+    // --- ALTERAÇÃO INICIA ---
     const handleGenerateReport = () => {
+        // Função auxiliar para converter "AAAA-MM-DD" para um objeto Date local
+        // Isso evita o erro de fuso horário que estava a causar o problema.
+        const parseLocalDate = (dateString) => {
+            if (!dateString) return null;
+            const parts = dateString.split('-');
+            // O mês no construtor Date() é indexado em 0 (0 para janeiro, 11 para dezembro)
+            return new Date(parts[0], parts[1] - 1, parts[2]);
+        };
+
+        const start = parseLocalDate(startDate);
+        const end = parseLocalDate(endDate);
+        
+        // Define o final do dia para garantir que o último dia selecionado seja incluído
+        if (end) {
+            end.setHours(23, 59, 59, 999);
+        }
+
         let data = [];
         if (reportType === 'completedByPeriod') {
             data = orders.filter(o => {
                 const completed = o.status === 'Concluído' && o.completionDate;
                 if (!completed) return false;
-                const completionDate = new Date(o.completionDate);
-                const start = startDate ? new Date(startDate) : null;
-                const end = endDate ? new Date(endDate) : null;
-                if (end) end.setDate(end.getDate() + 1);
+                
+                const completionDate = parseLocalDate(o.completionDate);
+                if (!completionDate) return false;
+
                 if (start && completionDate < start) return false;
                 if (end && completionDate > end) return false;
                 return true;
@@ -1037,13 +1055,11 @@ const Reports = ({ orders, employees, clients }) => {
                 const completed = o.status === 'Concluído' && o.completionDate;
                 if (!completed) return false;
 
-                // Check if the selected employee is in the assignedEmployees array
                 if (!o.assignedEmployees?.some(emp => emp.id === selectedEmployee)) return false;
 
-                const completionDate = new Date(o.completionDate);
-                const start = startDate ? new Date(startDate) : null;
-                const end = endDate ? new Date(endDate) : null;
-                if (end) end.setDate(end.getDate() + 1);
+                const completionDate = parseLocalDate(o.completionDate);
+                if (!completionDate) return false;
+                
                 if (start && completionDate < start) return false;
                 if (end && completionDate > end) return false;
                 return true;
@@ -1053,10 +1069,8 @@ const Reports = ({ orders, employees, clients }) => {
                 if (selectedClient === '') return false;
                 if (o.clientId !== selectedClient) return false;
 
-                const openDate = new Date(o.openDate);
-                const start = startDate ? new Date(startDate) : null;
-                const end = endDate ? new Date(endDate) : null;
-                if (end) end.setDate(end.getDate() + 1);
+                const openDate = parseLocalDate(o.openDate);
+                if (!openDate) return false;
 
                 if (start && openDate < start) return false;
                 if (end && openDate > end) return false;
@@ -1065,7 +1079,7 @@ const Reports = ({ orders, employees, clients }) => {
         }
         setResults(data);
     };
-    
+    // --- ALTERAÇÃO TERMINA ---
 
     const generateReportPdf = (action = 'print') => {
         const input = reportPrintRef.current;
@@ -1117,7 +1131,6 @@ const Reports = ({ orders, employees, clients }) => {
 
     const handlePrintReport = () => generateReportPdf('print');
     const handleSaveReportAsPdf = () => generateReportPdf('save');
-
     
     const totalCommission = reportType === 'commissionsByEmployee'
         ? results.reduce((sum, order) => {
@@ -1128,7 +1141,6 @@ const Reports = ({ orders, employees, clients }) => {
 
     const totalValue = results.reduce((sum, order) => sum + order.totalValue, 0);
     
-
     const getReportSubTitle = () => {
         let period = '';
         if (startDate && endDate) {
@@ -1144,6 +1156,8 @@ const Reports = ({ orders, employees, clients }) => {
         }
         return period;
     };
+    
+    // O restante do componente permanece inalterado...
 
     return (
         <div className="animate-fade-in">
