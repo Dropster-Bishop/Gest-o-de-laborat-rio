@@ -1028,21 +1028,17 @@ const Reports = ({ orders, employees, clients }) => {
         ordersByClient: 'Relatório de Ordens por Cliente'
     };
     
-    // --- ALTERAÇÃO INICIA ---
+    // --- ALTERAÇÃO 1: LÓGICA DO RELATÓRIO "ORDENS POR CLIENTE" ATUALIZADA ---
     const handleGenerateReport = () => {
-        // Função auxiliar para converter "AAAA-MM-DD" para um objeto Date local
-        // Isso evita o erro de fuso horário que estava a causar o problema.
         const parseLocalDate = (dateString) => {
             if (!dateString) return null;
             const parts = dateString.split('-');
-            // O mês no construtor Date() é indexado em 0 (0 para janeiro, 11 para dezembro)
             return new Date(parts[0], parts[1] - 1, parts[2]);
         };
 
         const start = parseLocalDate(startDate);
         const end = parseLocalDate(endDate);
         
-        // Define o final do dia para garantir que o último dia selecionado seja incluído
         if (end) {
             end.setHours(23, 59, 59, 999);
         }
@@ -1079,21 +1075,33 @@ const Reports = ({ orders, employees, clients }) => {
                 return true;
             });
         } else if (reportType === 'ordersByClient') {
-            data = orders.filter(o => {
-                if (selectedClient === '') return false;
-                if (o.clientId !== selectedClient) return false;
+            // Filtra as ordens do cliente que estão concluídas e dentro do período
+            const filteredOrders = orders.filter(o => {
+                if (selectedClient === '' || o.clientId !== selectedClient) return false;
+                if (o.status !== 'Concluído' || !o.completionDate) return false;
 
-                const openDate = parseLocalDate(o.openDate);
-                if (!openDate) return false;
+                const completionDate = parseLocalDate(o.completionDate);
+                if (!completionDate) return false;
 
-                if (start && openDate < start) return false;
-                if (end && openDate > end) return false;
+                if (start && completionDate < start) return false;
+                if (end && completionDate > end) return false;
                 return true;
             });
+            
+            // Transforma os dados para listar cada serviço individualmente
+            data = filteredOrders.flatMap(order => 
+                order.services.map(service => ({
+                    ...service,
+                    orderId: order.id,
+                    orderNumber: order.number,
+                    patientName: order.patientName,
+                    completionDate: order.completionDate,
+                    subtotal: (service.price || 0) * (service.quantity || 1)
+                }))
+            );
         }
         setResults(data);
     };
-    // --- ALTERAÇÃO TERMINA ---
 
     const generateReportPdf = (action = 'print') => {
         const input = reportPrintRef.current;
@@ -1106,31 +1114,23 @@ const Reports = ({ orders, employees, clients }) => {
             const imgData = canvas.toDataURL('image/png');
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
-
             const MARGIN = 15;
             const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
             const usableWidth = pdfWidth - (MARGIN * 2);
-            const usableHeight = pdfHeight - (MARGIN * 2);
-
             const canvasWidth = canvas.width;
             const canvasHeight = canvas.height;
             const aspectRatio = canvasHeight / canvasWidth;
             const scaledHeight = usableWidth * aspectRatio;
-
             let heightLeft = scaledHeight;
             let position = 0;
-
             pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledHeight);
-            heightLeft -= usableHeight;
-
+            heightLeft -= (pdf.internal.pageSize.getHeight() - MARGIN * 2);
             while (heightLeft > 0) {
-                position -= usableHeight;
+                position -= (pdf.internal.pageSize.getHeight() - MARGIN * 2);
                 pdf.addPage();
                 pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledHeight);
-                heightLeft -= usableHeight;
+                heightLeft -= (pdf.internal.pageSize.getHeight() - MARGIN * 2);
             }
-
             if (action === 'print') {
                 pdf.autoPrint();
                 window.open(pdf.output('bloburl'), '_blank');
@@ -1153,12 +1153,15 @@ const Reports = ({ orders, employees, clients }) => {
         }, 0)
         : 0;
 
-    const totalValue = results.reduce((sum, order) => sum + order.totalValue, 0);
+    // --- ALTERAÇÃO 2: CÁLCULO DO VALOR TOTAL AJUSTADO PARA O NOVO FORMATO ---
+    const totalValue = reportType === 'ordersByClient'
+        ? results.reduce((sum, service) => sum + (service.subtotal || 0), 0)
+        : results.reduce((sum, order) => sum + (order.totalValue || 0), 0);
     
     const getReportSubTitle = () => {
         let period = '';
         if (startDate && endDate) {
-            period = `Período: ${new Date(startDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })} a ${new Date(endDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`;
+            period = `Período de Conclusão: ${new Date(startDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })} a ${new Date(endDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`;
         }
         if (reportType === 'commissionsByEmployee' && selectedEmployee) {
             const employeeName = employees.find(e => e.id === selectedEmployee)?.name || '';
@@ -1170,8 +1173,6 @@ const Reports = ({ orders, employees, clients }) => {
         }
         return period;
     };
-    
-    // O restante do componente permanece inalterado...
 
     return (
         <div className="animate-fade-in">
@@ -1182,7 +1183,7 @@ const Reports = ({ orders, employees, clients }) => {
                     <div>
                         <label htmlFor="reportType" className="block text-sm font-medium text-gray-700 mb-1">Tipo de Relatório</label>
                         <select id="reportType" value={reportType} onChange={e => { setReportType(e.target.value); setResults([]); }} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
-                            <option value="completedByPeriod">Serviços Concluídos</option>
+                            <option value="completedByPeriod">Serviços Concluídos (Geral)</option>
                             <option value="commissionsByEmployee">Comissões por Funcionário</option>
                             <option value="ordersByClient">Ordens por Cliente</option>
                         </select>
@@ -1233,51 +1234,78 @@ const Reports = ({ orders, employees, clients }) => {
                         </div>
                     )}
                     {results.length > 0 ? (
-                        <table className="w-full text-sm text-left text-gray-500">
-                            <thead className="text-xs text-gray-700 uppercase bg-gray-100">
-                                <tr>
-                                    {/* --- ALTERAÇÃO INICIA --- */}
-                                    <th scope="col" className="px-6 py-3">Nº O.S.</th>
-                                    <th scope="col" className="px-6 py-3">Cliente</th>
-                                    <th scope="col" className="px-6 py-3">Paciente</th>
-                                    <th scope="col" className="px-6 py-3">Data</th>
-                                    <th scope="col" className="px-6 py-3 text-right">Valor Total</th>
-                                    {/* --- ALTERAÇÃO TERMINA --- */}
-                                    {reportType === 'commissionsByEmployee' && <th scope="col" className="px-6 py-3 text-right">Comissão</th>}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                
-                                {results.map(order => {
-                                    const employeeCommission = reportType === 'commissionsByEmployee'
-                                        ? order.assignedEmployees?.find(emp => emp.id === selectedEmployee)?.commissionValue || 0
-                                        : 0;
-
-                                    return (
-                                        <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
-                                            {/* --- ALTERAÇÃO INICIA --- */}
-                                            <td className="px-6 py-4 font-medium">#{order.number}</td>
-                                            <td className="px-6 py-4">{order.clientName}</td>
-                                            <td className="px-6 py-4">{order.patientName}</td>
-                                            <td className="px-6 py-4">{new Date(reportType === 'completedByPeriod' || reportType === 'commissionsByEmployee' ? order.completionDate : order.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                                            <td className="px-6 py-4 text-right font-bold">R$ {order.totalValue.toFixed(2)}</td>
-                                            {/* --- ALTERAÇÃO TERMINA --- */}
-                                            {reportType === 'commissionsByEmployee' && (
-                                                <td className="px-6 py-4 text-right">R$ {employeeCommission.toFixed(2)}</td>
-                                            )}
+                        // --- ALTERAÇÃO 3: NOVA TABELA PARA O RELATÓRIO "ORDENS POR CLIENTE" ---
+                        reportType === 'ordersByClient' ? (
+                            <table className="w-full text-sm text-left text-gray-500">
+                                <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                                    <tr>
+                                        <th scope="col" className="px-6 py-3">Nº O.S.</th>
+                                        <th scope="col" className="px-6 py-3">Paciente</th>
+                                        <th scope="col" className="px-6 py-3">Serviço Realizado</th>
+                                        <th scope="col" className="px-6 py-3">Data Conclusão</th>
+                                        <th scope="col" className="px-6 py-3 text-right">Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {results.map((item, index) => (
+                                        <tr key={`${item.orderId}-${index}`} className="bg-white border-b hover:bg-gray-50">
+                                            <td className="px-6 py-4 font-medium">#{item.orderNumber}</td>
+                                            <td className="px-6 py-4">{item.patientName}</td>
+                                            <td className="px-6 py-4">{item.name}</td>
+                                            <td className="px-6 py-4">{new Date(item.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                            <td className="px-6 py-4 text-right">R$ {item.subtotal.toFixed(2)}</td>
                                         </tr>
-                                    );
-                                })}
-                                
-                            </tbody>
-                            <tfoot className="font-bold bg-gray-100">
-                                <tr>
-                                    <td colSpan={reportType === 'commissionsByEmployee' ? 4 : 4} className="px-6 py-3 text-right uppercase">Total:</td>
-                                    <td className="px-6 py-3 text-right">R$ {totalValue.toFixed(2)}</td>
-                                    {reportType === 'commissionsByEmployee' && <td className="px-6 py-3 text-right">R$ {totalCommission.toFixed(2)}</td>}
-                                </tr>
-                            </tfoot>
-                        </table>
+                                    ))}
+                                </tbody>
+                                <tfoot className="font-bold bg-gray-100">
+                                    <tr>
+                                        <td colSpan="4" className="px-6 py-3 text-right uppercase">Total:</td>
+                                        <td className="px-6 py-3 text-right">R$ {totalValue.toFixed(2)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        ) : (
+                            // Tabela original para os outros relatórios
+                            <table className="w-full text-sm text-left text-gray-500">
+                                <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                                    <tr>
+                                        <th scope="col" className="px-6 py-3">Nº O.S.</th>
+                                        <th scope="col" className="px-6 py-3">Cliente</th>
+                                        <th scope="col" className="px-6 py-3">Paciente</th>
+                                        <th scope="col" className="px-6 py-3">Data</th>
+                                        <th scope="col" className="px-6 py-3 text-right">Valor Total</th>
+                                        {reportType === 'commissionsByEmployee' && <th scope="col" className="px-6 py-3 text-right">Comissão</th>}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {results.map(order => {
+                                        const employeeCommission = reportType === 'commissionsByEmployee'
+                                            ? order.assignedEmployees?.find(emp => emp.id === selectedEmployee)?.commissionValue || 0
+                                            : 0;
+
+                                        return (
+                                            <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
+                                                <td className="px-6 py-4 font-medium">#{order.number}</td>
+                                                <td className="px-6 py-4">{order.clientName}</td>
+                                                <td className="px-6 py-4">{order.patientName}</td>
+                                                <td className="px-6 py-4">{new Date(reportType === 'completedByPeriod' || reportType === 'commissionsByEmployee' ? order.completionDate : order.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                                <td className="px-6 py-4 text-right font-bold">R$ {order.totalValue.toFixed(2)}</td>
+                                                {reportType === 'commissionsByEmployee' && (
+                                                    <td className="px-6 py-4 text-right">R$ {employeeCommission.toFixed(2)}</td>
+                                                )}
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                                <tfoot className="font-bold bg-gray-100">
+                                    <tr>
+                                        <td colSpan={reportType === 'commissionsByEmployee' ? 4 : 4} className="px-6 py-3 text-right uppercase">Total:</td>
+                                        <td className="px-6 py-3 text-right">R$ {totalValue.toFixed(2)}</td>
+                                        {reportType === 'commissionsByEmployee' && <td className="px-6 py-3 text-right">R$ {totalCommission.toFixed(2)}</td>}
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        )
                     ) : (
                         <p className="text-center text-gray-500 py-4">Nenhum resultado para os filtros selecionados.</p>
                     )}
