@@ -18,6 +18,9 @@ import {
     updateDoc,
     deleteDoc,
     query,
+    orderBy,
+    limit,
+    getDocs,
     serverTimestamp,
     setDoc,
     getDoc,
@@ -340,6 +343,8 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
 };
 
 // --- ALTERAÇÃO INICIA ---
+// --- COLE ESTE CÓDIGO SUBSTITUINDO O SEU COMPONENTE OrderFormModal EXISTENTE ---
+
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState({});
@@ -462,8 +467,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         setEditingService(null);
     };
 
-// Localize esta função dentro do componente OrderFormModal
-
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!userId) return;
@@ -474,8 +477,11 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             alert('Cliente e ao menos um Funcionário são obrigatórios.');
             return;
         }
-
-        const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
+        
+        // --- ALTERAÇÃO INICIA: Lógica de cálculo do número da O.S. foi removida daqui ---
+        // A lógica antiga (`const lastOrderNumber = orders.reduce(...)`) foi excluída.
+        // O cálculo agora é feito dentro do bloco 'else' abaixo, antes de salvar.
+        // --- ALTERAÇÃO TERMINA ---
 
         const finalServices = selectedServices.map(s => ({ ...s, quantity: Number(s.quantity) || 1, }));
         const finalTotalValue = finalServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
@@ -487,17 +493,12 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
 
         const totalCommissionValue = finalAssignedEmployees.reduce((sum, emp) => sum + emp.commissionValue, 0);
 
-        // --- ALTERAÇÃO INICIA ---
-        // Lógica aprimorada para garantir a data de conclusão
         const status = formRef.current.status.value;
         let completionDateValue = formRef.current.completionDate.value || null;
 
-        // Se o status for 'Concluído' e a data de conclusão não foi preenchida,
-        // define a data de hoje automaticamente para garantir consistência nos relatórios.
         if (status === 'Concluído' && !completionDateValue) {
             completionDateValue = new Date().toISOString().split('T')[0];
         }
-        // --- ALTERAÇÃO TERMINA ---
 
         const orderData = {
             clientId: client.id, clientName: client.name, client: client,
@@ -505,8 +506,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             employeeName: finalAssignedEmployees.map(e => e.name).join(', '),
             assignedEmployees: finalAssignedEmployees,
             openDate: formRef.current.openDate.value, deliveryDate: formRef.current.deliveryDate.value,
-            completionDate: completionDateValue, // Usa o valor corrigido
-            status: status, // Usa o valor corrigido
+            completionDate: completionDateValue,
+            status: status,
             services: finalServices,
             totalValue: finalTotalValue,
             commissionValue: totalCommissionValue,
@@ -518,12 +519,33 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         try {
             const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/serviceOrders`);
             if (order) {
+                // Lógica de ATUALIZAÇÃO (não mexe no número da O.S.)
                 const docRef = doc(db, collectionRef.path, order.id);
                 await updateDoc(docRef, orderData);
             } else {
+                // --- ALTERAÇÃO INICIA: Lógica CORRIGIDA para criar uma NOVA O.S. ---
+                
+                // 1. Cria uma consulta para buscar a O.S. com o maior número no banco de dados
+                const q = query(collectionRef, orderBy("number", "desc"), limit(1));
+                const querySnapshot = await getDocs(q);
+
+                // 2. Determina qual foi o último número, ou começa do 0 se não houver nenhuma O.S.
+                let lastOrderNumber = 0;
+                if (!querySnapshot.empty) {
+                    const lastNumberFromDB = querySnapshot.docs[0].data().number;
+                    // Garante que o valor é um número válido antes de usar
+                    if (typeof lastNumberFromDB === 'number') {
+                        lastOrderNumber = lastNumberFromDB;
+                    }
+                }
+
+                // 3. Define o número da nova O.S. e a data de criação
                 orderData.number = lastOrderNumber + 1;
                 orderData.createdAt = serverTimestamp();
+
+                // 4. Salva o novo documento com o número correto
                 await addDoc(collectionRef, orderData);
+                // --- ALTERAÇÃO TERMINA ---
             }
             onClose();
         } catch (error) { console.error("Error saving service order: ", error); }
@@ -542,7 +564,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         </select>
                     </div>
                     <Input label="Nome do Paciente" id="patientName" type="text" ref={el => formRef.current.patientName = el} defaultValue={order?.patientName} required />
-                    <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate} required />
+                    <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate || new Date().toISOString().split('T')[0]} required />
                     <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required />
                 </div>
                 {/* --- FUNCIONÁRIOS --- */}
@@ -607,12 +629,11 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         <div className="max-h-60 overflow-y-auto p-1 bg-white border rounded-lg">
                             {selectedServices.length > 0 ? (
                                 selectedServices.map((service, index) => (
-                                    // --- [LAYOUT NOVO E CORRIGIDO] ---
-                                    <div key={service.id} className="p-2 rounded-md hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
+                                    <div key={index} className="p-2 rounded-md hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
                                         <div className="flex justify-between items-center">
                                             <span className="font-medium text-sm text-gray-800 truncate pr-2">{service.name}</span>
                                             <div className="flex items-center gap-2 flex-shrink-0">
-                                                <button type="button" onClick={() => setEditingService({ index, data: service })} className="p-1 text-blue-600 hover:text-blue-800" title="Editar serviço">
+                                                <button type="button" onClick={() => setEditingService({ index, data: service })} className="p-1 text-blue-600 hover:text-blue-800" title="Editar detalhes">
                                                     <LucideEdit size={16} />
                                                 </button>
                                                 <button type="button" onClick={() => handleServiceToggle(service)} className="p-1 text-red-500 hover:text-red-700" title="Remover serviço">
