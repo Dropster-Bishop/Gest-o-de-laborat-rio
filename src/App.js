@@ -821,21 +821,21 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         }
     };
 
-    // --- ALTERAÇÃO INICIA ---
-    // Adiciona a busca pelo número da O.S. (`order.number`)
     const filteredOrders = orders.filter(order => {
         const matchesFilter = filter === 'Todos' || order.status === filter;
         const lowerCaseSearchTerm = searchTerm.toLowerCase();
         
         const matchesSearch = searchTerm === '' ||
-            String(order.number).toLowerCase().includes(lowerCaseSearchTerm) || // Busca pelo número da O.S.
+            // --- ALTERAÇÃO INICIA ---
+            // Altera de 'includes' para '===' para uma busca exata do número da O.S.
+            String(order.number) === searchTerm.trim() ||
+            // --- ALTERAÇÃO TERMINA ---
             order.clientName.toLowerCase().includes(lowerCaseSearchTerm) ||
             order.patientName.toLowerCase().includes(lowerCaseSearchTerm) ||
             (order.employeeName && order.employeeName.toLowerCase().includes(lowerCaseSearchTerm));
             
         return matchesFilter && matchesSearch;
     });
-    // --- ALTERAÇÃO TERMINA ---
 
     return (
         <div className="animate-fade-in">
@@ -844,8 +844,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                 <div className="w-full md:w-auto flex flex-col md:flex-row items-center gap-2">
                     <div className="relative w-full md:w-64">
                         <LucideSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                        {/* --- ALTERAÇÃO INICIA --- */}
-                        {/* Atualiza o texto de exemplo no campo de busca */}
                         <Input
                             type="text"
                             placeholder="Buscar por Nº O.S., Cliente..."
@@ -853,7 +851,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="pl-10"
                         />
-                        {/* --- ALTERAÇÃO TERMINA --- */}
                     </div>
                     <select
                         value={filter}
