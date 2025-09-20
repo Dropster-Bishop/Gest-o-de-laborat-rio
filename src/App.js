@@ -18,9 +18,6 @@ import {
     updateDoc,
     deleteDoc,
     query,
-    orderBy,
-    limit,
-    getDocs,
     serverTimestamp,
     setDoc,
     getDoc,
@@ -343,8 +340,6 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
 };
 
 // --- ALTERAÇÃO INICIA ---
-// --- COLE ESTE CÓDIGO SUBSTITUINDO O SEU COMPONENTE OrderFormModal EXISTENTE ---
-
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState({});
@@ -467,6 +462,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         setEditingService(null);
     };
 
+// Localize esta função dentro do componente OrderFormModal
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!userId) return;
@@ -477,11 +474,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             alert('Cliente e ao menos um Funcionário são obrigatórios.');
             return;
         }
-        
-        // --- ALTERAÇÃO INICIA: Lógica de cálculo do número da O.S. foi removida daqui ---
-        // A lógica antiga (`const lastOrderNumber = orders.reduce(...)`) foi excluída.
-        // O cálculo agora é feito dentro do bloco 'else' abaixo, antes de salvar.
-        // --- ALTERAÇÃO TERMINA ---
+
+        const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
 
         const finalServices = selectedServices.map(s => ({ ...s, quantity: Number(s.quantity) || 1, }));
         const finalTotalValue = finalServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
@@ -493,12 +487,17 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
 
         const totalCommissionValue = finalAssignedEmployees.reduce((sum, emp) => sum + emp.commissionValue, 0);
 
+        // --- ALTERAÇÃO INICIA ---
+        // Lógica aprimorada para garantir a data de conclusão
         const status = formRef.current.status.value;
         let completionDateValue = formRef.current.completionDate.value || null;
 
+        // Se o status for 'Concluído' e a data de conclusão não foi preenchida,
+        // define a data de hoje automaticamente para garantir consistência nos relatórios.
         if (status === 'Concluído' && !completionDateValue) {
             completionDateValue = new Date().toISOString().split('T')[0];
         }
+        // --- ALTERAÇÃO TERMINA ---
 
         const orderData = {
             clientId: client.id, clientName: client.name, client: client,
@@ -506,8 +505,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             employeeName: finalAssignedEmployees.map(e => e.name).join(', '),
             assignedEmployees: finalAssignedEmployees,
             openDate: formRef.current.openDate.value, deliveryDate: formRef.current.deliveryDate.value,
-            completionDate: completionDateValue,
-            status: status,
+            completionDate: completionDateValue, // Usa o valor corrigido
+            status: status, // Usa o valor corrigido
             services: finalServices,
             totalValue: finalTotalValue,
             commissionValue: totalCommissionValue,
@@ -519,33 +518,12 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         try {
             const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/serviceOrders`);
             if (order) {
-                // Lógica de ATUALIZAÇÃO (não mexe no número da O.S.)
                 const docRef = doc(db, collectionRef.path, order.id);
                 await updateDoc(docRef, orderData);
             } else {
-                // --- ALTERAÇÃO INICIA: Lógica CORRIGIDA para criar uma NOVA O.S. ---
-                
-                // 1. Cria uma consulta para buscar a O.S. com o maior número no banco de dados
-                const q = query(collectionRef, orderBy("number", "desc"), limit(1));
-                const querySnapshot = await getDocs(q);
-
-                // 2. Determina qual foi o último número, ou começa do 0 se não houver nenhuma O.S.
-                let lastOrderNumber = 0;
-                if (!querySnapshot.empty) {
-                    const lastNumberFromDB = querySnapshot.docs[0].data().number;
-                    // Garante que o valor é um número válido antes de usar
-                    if (typeof lastNumberFromDB === 'number') {
-                        lastOrderNumber = lastNumberFromDB;
-                    }
-                }
-
-                // 3. Define o número da nova O.S. e a data de criação
                 orderData.number = lastOrderNumber + 1;
                 orderData.createdAt = serverTimestamp();
-
-                // 4. Salva o novo documento com o número correto
                 await addDoc(collectionRef, orderData);
-                // --- ALTERAÇÃO TERMINA ---
             }
             onClose();
         } catch (error) { console.error("Error saving service order: ", error); }
@@ -564,7 +542,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         </select>
                     </div>
                     <Input label="Nome do Paciente" id="patientName" type="text" ref={el => formRef.current.patientName = el} defaultValue={order?.patientName} required />
-                    <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate || new Date().toISOString().split('T')[0]} required />
+                    <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate} required />
                     <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required />
                 </div>
                 {/* --- FUNCIONÁRIOS --- */}
@@ -629,11 +607,12 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         <div className="max-h-60 overflow-y-auto p-1 bg-white border rounded-lg">
                             {selectedServices.length > 0 ? (
                                 selectedServices.map((service, index) => (
-                                    <div key={index} className="p-2 rounded-md hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
+                                    // --- [LAYOUT NOVO E CORRIGIDO] ---
+                                    <div key={service.id} className="p-2 rounded-md hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
                                         <div className="flex justify-between items-center">
                                             <span className="font-medium text-sm text-gray-800 truncate pr-2">{service.name}</span>
                                             <div className="flex items-center gap-2 flex-shrink-0">
-                                                <button type="button" onClick={() => setEditingService({ index, data: service })} className="p-1 text-blue-600 hover:text-blue-800" title="Editar detalhes">
+                                                <button type="button" onClick={() => setEditingService({ index, data: service })} className="p-1 text-blue-600 hover:text-blue-800" title="Editar serviço">
                                                     <LucideEdit size={16} />
                                                 </button>
                                                 <button type="button" onClick={() => handleServiceToggle(service)} className="p-1 text-red-500 hover:text-red-700" title="Remover serviço">
@@ -768,15 +747,11 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             return;
         }
 
-        // --- ALTERAÇÃO INICIA ---
         const elementsToHide = input.querySelectorAll('.hide-on-print');
         elementsToHide.forEach(el => el.style.visibility = 'hidden');
-        // --- ALTERAÇÃO TERMINA ---
 
         window.html2canvas(input, { scale: 2, useCORS: true }).then(canvas => {
-            // --- ALTERAÇÃO INICIA ---
             elementsToHide.forEach(el => el.style.visibility = 'visible');
-            // --- ALTERAÇÃO TERMINA ---
 
             const imgData = canvas.toDataURL('image/png');
             const { jsPDF } = window.jspdf;
@@ -813,9 +788,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                 pdf.save(`OS_${currentOrder.number}.pdf`);
             }
         }).catch(err => {
-            // --- ALTERAÇÃO INICIA ---
             elementsToHide.forEach(el => el.style.visibility = 'visible');
-            // --- ALTERAÇÃO TERMINA ---
             console.error("Error generating PDF:", err);
             alert("Ocorreu um erro ao gerar o PDF.");
         });
@@ -848,14 +821,21 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         }
     };
 
+    // --- ALTERAÇÃO INICIA ---
+    // Adiciona a busca pelo número da O.S. (`order.number`)
     const filteredOrders = orders.filter(order => {
         const matchesFilter = filter === 'Todos' || order.status === filter;
+        const lowerCaseSearchTerm = searchTerm.toLowerCase();
+        
         const matchesSearch = searchTerm === '' ||
-            order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (order.employeeName && order.employeeName.toLowerCase().includes(searchTerm.toLowerCase()));
+            String(order.number).toLowerCase().includes(lowerCaseSearchTerm) || // Busca pelo número da O.S.
+            order.clientName.toLowerCase().includes(lowerCaseSearchTerm) ||
+            order.patientName.toLowerCase().includes(lowerCaseSearchTerm) ||
+            (order.employeeName && order.employeeName.toLowerCase().includes(lowerCaseSearchTerm));
+            
         return matchesFilter && matchesSearch;
     });
+    // --- ALTERAÇÃO TERMINA ---
 
     return (
         <div className="animate-fade-in">
@@ -864,13 +844,16 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                 <div className="w-full md:w-auto flex flex-col md:flex-row items-center gap-2">
                     <div className="relative w-full md:w-64">
                         <LucideSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                        {/* --- ALTERAÇÃO INICIA --- */}
+                        {/* Atualiza o texto de exemplo no campo de busca */}
                         <Input
                             type="text"
-                            placeholder="Buscar por Cliente, Paciente..."
+                            placeholder="Buscar por Nº O.S., Cliente..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="pl-10"
                         />
+                        {/* --- ALTERAÇÃO TERMINA --- */}
                     </div>
                     <select
                         value={filter}
@@ -969,7 +952,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                 <p><strong>Conclusão:</strong> {currentOrder.completionDate ? new Date(currentOrder.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '---'}</p>
                             </div>
                         </div>
-                        {/* --- ALTERAÇÃO INICIA --- */}
                         <div className="mb-6 hide-on-print">
                             <h3 className="font-bold mb-2 border-b">Responsáveis e Comissões</h3>
                             <div className="space-y-1 text-sm">
@@ -983,7 +965,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                 ))}
                             </div>
                         </div>
-                        {/* --- ALTERAÇÃO TERMINA --- */}
 
                         <h3 className="font-bold mb-2 border-b">Serviços Solicitados</h3>
                         <table className="w-full text-left mb-6">
@@ -1015,11 +996,9 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                 <p className="text-sm italic">{currentOrder.observations || 'Nenhuma observação.'}</p>
                             </div>
                             <div className="text-right">
-                                {/* --- ALTERAÇÃO INICIA --- */}
                                 <p className="hide-on-print"><strong>Comissão Total:</strong> R$ {(currentOrder.commissionValue || 0).toFixed(2)}</p>
                                 <p className="text-lg font-bold"><strong>Valor Total:</strong> R$ {currentOrder.totalValue.toFixed(2)}</p>
                                 <p className="font-bold mt-2"><strong>Status:</strong> {currentOrder.status}</p>
-                                {/* --- ALTERAÇÃO TERMINA --- */}
                             </div>
                         </div>
                     </div>
