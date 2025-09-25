@@ -7,7 +7,8 @@ import {
     onAuthStateChanged,
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
-    signOut
+    signOut,
+    sendPasswordResetEmail
 } from 'firebase/auth';
 import {
     getFirestore,
@@ -339,7 +340,6 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
     );
 };
 
-// --- ALTERAÇÃO INICIA ---
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState({});
@@ -462,8 +462,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         setEditingService(null);
     };
 
-// Localize esta função dentro do componente OrderFormModal
-
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!userId) return;
@@ -486,18 +484,13 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         });
 
         const totalCommissionValue = finalAssignedEmployees.reduce((sum, emp) => sum + emp.commissionValue, 0);
-
-        // --- ALTERAÇÃO INICIA ---
-        // Lógica aprimorada para garantir a data de conclusão
+        
         const status = formRef.current.status.value;
         let completionDateValue = formRef.current.completionDate.value || null;
 
-        // Se o status for 'Concluído' e a data de conclusão não foi preenchida,
-        // define a data de hoje automaticamente para garantir consistência nos relatórios.
         if (status === 'Concluído' && !completionDateValue) {
             completionDateValue = new Date().toISOString().split('T')[0];
         }
-        // --- ALTERAÇÃO TERMINA ---
 
         const orderData = {
             clientId: client.id, clientName: client.name, client: client,
@@ -505,8 +498,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             employeeName: finalAssignedEmployees.map(e => e.name).join(', '),
             assignedEmployees: finalAssignedEmployees,
             openDate: formRef.current.openDate.value, deliveryDate: formRef.current.deliveryDate.value,
-            completionDate: completionDateValue, // Usa o valor corrigido
-            status: status, // Usa o valor corrigido
+            completionDate: completionDateValue,
+            status: status,
             services: finalServices,
             totalValue: finalTotalValue,
             commissionValue: totalCommissionValue,
@@ -607,7 +600,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         <div className="max-h-60 overflow-y-auto p-1 bg-white border rounded-lg">
                             {selectedServices.length > 0 ? (
                                 selectedServices.map((service, index) => (
-                                    // --- [LAYOUT NOVO E CORRIGIDO] ---
                                     <div key={service.id} className="p-2 rounded-md hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
                                         <div className="flex justify-between items-center">
                                             <span className="font-medium text-sm text-gray-800 truncate pr-2">{service.name}</span>
@@ -689,7 +681,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         </Modal>
     );
 };
-// --- ALTERAÇÃO TERMINA ---
 
 const ServiceOrders = ({ userId, services, clients, employees, orders, priceTables }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -746,7 +737,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             alert('Não foi possível gerar o PDF. Bibliotecas necessárias não encontradas.');
             return;
         }
-
+        
         const elementsToHide = input.querySelectorAll('.hide-on-print');
         elementsToHide.forEach(el => el.style.visibility = 'hidden');
 
@@ -826,10 +817,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         const lowerCaseSearchTerm = searchTerm.toLowerCase();
         
         const matchesSearch = searchTerm === '' ||
-            // --- ALTERAÇÃO INICIA ---
-            // Altera de 'includes' para '===' para uma busca exata do número da O.S.
             String(order.number) === searchTerm.trim() ||
-            // --- ALTERAÇÃO TERMINA ---
             order.clientName.toLowerCase().includes(lowerCaseSearchTerm) ||
             order.patientName.toLowerCase().includes(lowerCaseSearchTerm) ||
             (order.employeeName && order.employeeName.toLowerCase().includes(lowerCaseSearchTerm));
@@ -1008,8 +996,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         </div>
     );
 };
-// --- Copie e cole o restante do seu arquivo App.js aqui (Reports, PriceTables, Financials, etc.) ---
-// --- O código restante não foi alterado e pode ser copiado do seu arquivo original. ---
+
 const Reports = ({ orders, employees, clients }) => {
     const [reportType, setReportType] = useState('completedByPeriod');
     const [startDate, setStartDate] = useState('');
@@ -1025,7 +1012,6 @@ const Reports = ({ orders, employees, clients }) => {
         ordersByClient: 'Relatório de Ordens por Cliente'
     };
     
-    // --- ALTERAÇÃO 1: LÓGICA DO RELATÓRIO "ORDENS POR CLIENTE" ATUALIZADA ---
     const handleGenerateReport = () => {
         const parseLocalDate = (dateString) => {
             if (!dateString) return null;
@@ -1072,7 +1058,6 @@ const Reports = ({ orders, employees, clients }) => {
                 return true;
             });
         } else if (reportType === 'ordersByClient') {
-            // Filtra as ordens do cliente que estão concluídas e dentro do período
             const filteredOrders = orders.filter(o => {
                 if (selectedClient === '' || o.clientId !== selectedClient) return false;
                 if (o.status !== 'Concluído' || !o.completionDate) return false;
@@ -1085,7 +1070,6 @@ const Reports = ({ orders, employees, clients }) => {
                 return true;
             });
             
-            // Transforma os dados para listar cada serviço individualmente
             data = filteredOrders.flatMap(order => 
                 order.services.map(service => ({
                     ...service,
@@ -1150,7 +1134,6 @@ const Reports = ({ orders, employees, clients }) => {
         }, 0)
         : 0;
 
-    // --- ALTERAÇÃO 2: CÁLCULO DO VALOR TOTAL AJUSTADO PARA O NOVO FORMATO ---
     const totalValue = reportType === 'ordersByClient'
         ? results.reduce((sum, service) => sum + (service.subtotal || 0), 0)
         : results.reduce((sum, order) => sum + (order.totalValue || 0), 0);
@@ -1231,7 +1214,6 @@ const Reports = ({ orders, employees, clients }) => {
                         </div>
                     )}
                     {results.length > 0 ? (
-                        // --- ALTERAÇÃO 3: NOVA TABELA PARA O RELATÓRIO "ORDENS POR CLIENTE" ---
                         reportType === 'ordersByClient' ? (
                             <table className="w-full text-sm text-left text-gray-500">
                                 <thead className="text-xs text-gray-700 uppercase bg-gray-100">
@@ -1262,7 +1244,6 @@ const Reports = ({ orders, employees, clients }) => {
                                 </tfoot>
                             </table>
                         ) : (
-                            // Tabela original para os outros relatórios
                             <table className="w-full text-sm text-left text-gray-500">
                                 <thead className="text-xs text-gray-700 uppercase bg-gray-100">
                                     <tr>
@@ -1705,9 +1686,7 @@ const PaymentForm = ({ onSubmit, payment }) => {
 
 const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
     const receiptRef = useRef();
-
-    // --- ALTERAÇÃO INICIA ---
-    // A função antiga foi completamente substituída por esta versão corrigida.
+    
     const numberToWords = (num) => {
         if (num === null || num === undefined) return 'zero reais';
         
@@ -1734,7 +1713,6 @@ const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
             }
             if (n === 100) return 'cem';
             if (n < 1000) {
-                // Usa 'cento' para números compostos (ex: cento e um)
                 return centenas[Math.floor(n / 100)].replace('cem', 'cento') + (n % 100 !== 0 ? ' e ' + extenso(n % 100) : '');
             }
             if (n < 1000000) {
@@ -1743,22 +1721,19 @@ const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
                 const milharStr = milhar === 1 ? 'mil' : extenso(milhar) + ' mil';
                 
                 if (resto === 0) return milharStr;
-                // Regra de conjunção: "mil e um", mas "mil duzentos"
                 if (resto < 100 || resto % 100 === 0) return milharStr + ' e ' + extenso(resto);
                 return milharStr + ' ' + extenso(resto);
             }
-            // Adicionado para suportar milhões, pode ser estendido se necessário
             if (n < 1000000000) {
                 const milhao = Math.floor(n / 1000000);
                 const resto = n % 1000000;
                 const milhaoStr = milhao === 1 ? 'um milhão' : extenso(milhao) + ' milhões';
 
                 if (resto === 0) return milhaoStr;
-                // Simplificando a conjunção para milhões
                 return milhaoStr + ' e ' + extenso(resto);
             }
 
-            return ''; // Fora do escopo para valores maiores
+            return '';
         };
 
         let resultado = '';
@@ -1775,7 +1750,6 @@ const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
         
         return resultado.trim();
     };
-    // --- ALTERAÇÃO TERMINA ---
 
     const generatePdf = (action = 'print') => {
         const input = receiptRef.current;
@@ -1977,9 +1951,7 @@ const Financials = ({ userId, orders, companyProfile }) => {
             alert("Falha ao registrar o recebimento.");
         }
     };
-
-    // --- ALTERAÇÃO INICIA ---
-    // A função agora recebe o objeto 'client' com todos os pedidos pagos
+    
     const handleGenerateSecondCopy = (clientData) => {
         if (!companyProfile?.companyName) {
             alert('Atenção: Os dados da sua empresa não estão preenchidos na aba "Configurações". O recibo pode sair incompleto.');
@@ -1987,15 +1959,14 @@ const Financials = ({ userId, orders, companyProfile }) => {
 
         const receiptData = {
             clientName: clientData.clientName,
-            clientDocument: clientData.paidOrders[0]?.client?.document, // Pega o documento do primeiro pedido
-            totalValue: clientData.totalPaid, // Usa o total já pago
-            orders: clientData.paidOrders, // Inclui todos os pedidos pagos
-            receiptNumber: clientData.paidOrders.map(o => o.number).join(', ') // Junta todos os números de O.S.
+            clientDocument: clientData.paidOrders[0]?.client?.document,
+            totalValue: clientData.totalPaid,
+            orders: clientData.paidOrders,
+            receiptNumber: clientData.paidOrders.map(o => o.number).join(', ')
         };
         setDataForReceipt(receiptData);
         setIsReceiptModalOpen(true);
     };
-    // --- ALTERAÇÃO TERMINA ---
 
     const handleCloseReceiptModal = () => {
         setDataForReceipt(null);
@@ -2084,8 +2055,6 @@ const Financials = ({ userId, orders, companyProfile }) => {
                                 {Object.keys(paidByClient).length > 0 ? Object.values(paidByClient).sort((a, b) => a.clientName.localeCompare(b.clientName)).map((client, idx) => (
                                     <div key={idx} className="border rounded-lg overflow-hidden">
                                         <div className="w-full flex justify-between items-center p-4 bg-gray-50">
-                                            {/* --- ALTERAÇÃO INICIA --- */}
-                                            {/* O botão de expandir agora é separado para permitir o clique no botão de 2ª via */}
                                             <div onClick={() => setExpandedClient(expandedClient === client.clientName ? null : client.clientName)} className="flex-grow cursor-pointer">
                                                 <p className="font-semibold text-gray-800">{client.clientName}</p>
                                                 <p className="text-sm text-green-600">Total recebido: <span className="font-bold">R$ {client.totalPaid.toFixed(2)}</span></p>
@@ -2103,7 +2072,6 @@ const Financials = ({ userId, orders, companyProfile }) => {
                                                     <LucideChevronDown className={`transition-transform ${expandedClient === client.clientName ? 'rotate-180' : ''}`} />
                                                 </button>
                                             </div>
-                                            {/* --- ALTERAÇÃO TERMINA --- */}
                                         </div>
                                         {expandedClient === client.clientName && (
                                             <div className="p-4 bg-white">
@@ -2230,6 +2198,7 @@ const Settings = ({ userId, initialProfile }) => {
 
 const LoginScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
+    const [isPasswordReset, setIsPasswordReset] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -2288,36 +2257,110 @@ const LoginScreen = () => {
         setLoading(false);
     };
 
+    const handlePasswordReset = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        setMessage('');
+        try {
+            await sendPasswordResetEmail(auth, email);
+            setMessage('E-mail de recuperação enviado! Verifique sua caixa de entrada e a pasta de spam.');
+            setIsPasswordReset(false);
+        } catch (err) {
+            if (err.code === 'auth/user-not-found') {
+                setError('Nenhum utilizador encontrado com este e-mail.');
+            } else {
+                setError('Ocorreu um erro ao enviar o e-mail. Tente novamente.');
+            }
+        }
+        setLoading(false);
+    };
+
+    const toggleView = (view) => {
+        setError('');
+        setMessage('');
+        if (view === 'login') {
+            setIsLogin(true);
+            setIsPasswordReset(false);
+        } else if (view === 'register') {
+            setIsLogin(false);
+            setIsPasswordReset(false);
+        } else if (view === 'reset') {
+            setIsPasswordReset(true);
+        }
+    };
+
+
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-100">
             <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-2xl shadow-lg">
                 <div className="text-center">
                     <LucideClipboardEdit className="h-12 w-12 text-indigo-600 mx-auto" />
-                    <h1 className="text-3xl font-bold text-gray-800 mt-2">Gestor Próteses</h1>
-                    <p className="text-gray-500">{isLogin ? 'Faça login para continuar' : 'Crie a sua conta'}</p>
+                    <h1 className="text-3xl font-bold text-gray-800 mt-2">
+                        {isPasswordReset ? 'Recuperar Senha' : 'Gestor Próteses'}
+                    </h1>
+                    <p className="text-gray-500">
+                        {isPasswordReset ? 'Insira seu e-mail para continuar' : (isLogin ? 'Faça login para continuar' : 'Crie a sua conta')}
+                    </p>
                 </div>
-                {message ? (
-                    <p className="text-green-600 bg-green-50 p-4 rounded-lg text-center">{message}</p>
-                ) : (
-                    <form onSubmit={handleAuth} className="space-y-6">
-                        <Input label="Email" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+
+                {message && <p className="text-green-600 bg-green-50 p-4 rounded-lg text-center">{message}</p>}
+                
+                <form onSubmit={isPasswordReset ? handlePasswordReset : handleAuth} className="space-y-6">
+                    <Input label="Email" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+                    
+                    {!isPasswordReset && (
                         <Input label="Senha" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-                        <Button type="submit" className="w-full" disabled={loading}>
-                            {loading ? 'Aguarde...' : (isLogin ? 'Entrar' : 'Cadastrar')}
-                        </Button>
-                    </form>
-                )}
-                <p className="text-center text-sm text-gray-600">
-                    {isLogin ? 'Não tem uma conta?' : 'Já tem uma conta?'}
-                    <button onClick={() => { setIsLogin(!isLogin); setError(''); setMessage('') }} className="font-medium text-indigo-600 hover:text-indigo-500 ml-1">
-                        {isLogin ? 'Cadastre-se' : 'Faça login'}
+                    )}
+
+                    {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+
+                    {!isPasswordReset && isLogin && (
+                        <div className="text-right">
+                            <button
+                                type="button"
+                                onClick={() => toggleView('reset')}
+                                className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
+                            >
+                                Esqueceu a senha?
+                            </button>
+                        </div>
+                    )}
+
+                    <Button type="submit" className="w-full" disabled={loading}>
+                        {loading ? 'Aguarde...' : (isPasswordReset ? 'Enviar E-mail de Recuperação' : (isLogin ? 'Entrar' : 'Cadastrar'))}
+                    </Button>
+                </form>
+
+                <div className="text-center text-sm text-gray-600">
+                    {isPasswordReset ? (
+                        <span>Lembrou da senha? </span>
+                    ) : (
+                        <span>{isLogin ? 'Não tem uma conta?' : 'Já tem uma conta?'} </span>
+                    )}
+                    <button 
+                        onClick={() => toggleView(isLogin || isPasswordReset ? 'register' : 'login')} 
+                        className="font-medium text-indigo-600 hover:text-indigo-500"
+                    >
+                        {isLogin || isPasswordReset ? 'Cadastre-se' : 'Faça login'}
                     </button>
-                </p>
+                    {isPasswordReset && (
+                        <>
+                         <span className='mx-1'>|</span>
+                         <button 
+                             onClick={() => toggleView('login')} 
+                             className="font-medium text-indigo-600 hover:text-indigo-500"
+                         >
+                             Voltar para o Login
+                         </button>
+                        </>
+                    )}
+                </div>
             </div>
         </div>
     );
 };
+
 
 const AppLayout = ({ user, userProfile }) => {
     const [activePage, setActivePage] = useState('dashboard');
