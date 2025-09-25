@@ -1372,6 +1372,8 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
         return acc;
     }, {});
 
+    // --- CÓDIGO CORRIGIDO ---
+    // A função generatePdf foi atualizada com a lógica de múltiplas páginas.
     const generatePdf = (action = 'print') => {
         const input = printRef.current;
         if (!input || !window.html2canvas || !window.jspdf) {
@@ -1386,14 +1388,27 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
 
             const MARGIN = 15;
             const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
             const usableWidth = pdfWidth - (MARGIN * 2);
+            const usableHeight = pdfHeight - (MARGIN * 2);
 
             const canvasWidth = canvas.width;
             const canvasHeight = canvas.height;
             const aspectRatio = canvasHeight / canvasWidth;
             const scaledHeight = usableWidth * aspectRatio;
 
+            let heightLeft = scaledHeight;
+            let position = 0;
+
             pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledHeight);
+            heightLeft -= usableHeight;
+
+            while (heightLeft > 0) {
+                position -= usableHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledHeight);
+                heightLeft -= usableHeight;
+            }
 
             if (action === 'print') {
                 pdf.autoPrint();
@@ -1406,6 +1421,7 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
             alert("Ocorreu um erro ao gerar o PDF.");
         });
     };
+    // --- FIM DA CORREÇÃO ---
 
     return (
         <Modal onClose={onClose} title={`Visualizar Tabela de Preços`} size="4xl">
