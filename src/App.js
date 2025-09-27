@@ -2226,6 +2226,8 @@ const Settings = ({ userId, initialProfile }) => {
 // --- NOVO COMPONENTE: FinancialDashboard ---
 // Localize o componente FinancialDashboard e substitua por este:
 
+// Localize o componente FinancialDashboard e substitua por este:
+
 const FinancialDashboard = ({ orders, payments, setActivePage }) => {
     const [period, setPeriod] = useState('thisMonth');
     const [customStartDate, setCustomStartDate] = useState('');
@@ -2233,11 +2235,11 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } = window.Recharts;
+    // A LINHA PROBLEMÁTICA "window.Recharts" FOI REMOVIDA DAQUI.
+    // A importação correta no topo do arquivo cuidará de tudo.
 
     const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF'];
 
-    // --- LÓGICA DE FILTRO ATUALIZADA ---
     const handleFilter = () => {
         setLoading(true);
 
@@ -2320,12 +2322,10 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
         setLoading(false);
     }
     
-    // Roda o filtro uma vez ao carregar e sempre que as ordens ou pagamentos mudarem
     useEffect(() => {
         handleFilter();
     }, [orders, payments]);
     
-    // Limpa as datas customizadas quando um período pré-definido é selecionado
     useEffect(() => {
         if (period !== 'custom') {
             setCustomStartDate('');
@@ -2344,7 +2344,6 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
                 <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Lançamentos</Button>
             </div>
             
-            {/* --- SEÇÃO DE FILTROS ATUALIZADA --- */}
             <div className="bg-white p-4 rounded-2xl shadow-md flex flex-col md:flex-row items-center gap-4">
                  <div className="flex-1">
                      <label htmlFor="period-select" className="block text-sm font-medium text-gray-700 mb-1">Período Rápido</label>
