@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 // --- Dependências ---
 import { initializeApp } from 'firebase/app';
 import {
@@ -2211,7 +2211,187 @@ const Settings = ({ userId, initialProfile }) => {
         </div>
     );
 };
+// ... (final do componente Settings) ...
 
+// --- NOVO COMPONENTE: FinancialDashboard ---
+const FinancialDashboard = ({ orders, payments, setActivePage }) => {
+    const [period, setPeriod] = useState('thisMonth');
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    // Importar componentes da Recharts. Adicione esta linha no topo do seu arquivo App.js
+    // import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+    // Para simplificar, vamos assumir que a biblioteca está disponível globalmente neste escopo.
+    const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } = window.Recharts;
+
+    const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF'];
+
+    useEffect(() => {
+        setLoading(true);
+
+        const now = new Date();
+        let startDate, endDate = new Date();
+
+        switch (period) {
+            case 'last30days':
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+                break;
+            case 'thisYear':
+                startDate = new Date(now.getFullYear(), 0, 1);
+                endDate = new Date(now.getFullYear(), 11, 31);
+                break;
+            case 'thisMonth':
+            default:
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        }
+
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+
+        // Filtrar dados baseados no período
+        const completedOrdersInPeriod = orders.filter(o => {
+            const completionDate = new Date(o.completionDate);
+            return o.status === 'Concluído' && completionDate >= startDate && completionDate <= endDate;
+        });
+
+        const paymentsInPeriod = payments.filter(p => {
+            const paymentDate = new Date(p.paymentDate);
+            return paymentDate >= startDate && paymentDate <= endDate;
+        });
+        
+        // --- Cálculos de KPIs ---
+        const grossRevenue = completedOrdersInPeriod.reduce((sum, o) => sum + o.totalValue, 0);
+        const realizedRevenue = completedOrdersInPeriod.filter(o => o.isPaid).reduce((sum, o) => sum + o.totalValue, 0);
+        const totalExpenses = paymentsInPeriod.reduce((sum, p) => sum + p.amount, 0);
+        const netProfit = realizedRevenue - totalExpenses;
+
+        // --- Dados para Gráficos ---
+        const revenueByClient = completedOrdersInPeriod.reduce((acc, order) => {
+            acc[order.clientName] = (acc[order.clientName] || 0) + order.totalValue;
+            return acc;
+        }, {});
+        
+        const topClients = Object.entries(revenueByClient)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5)
+            .map(([name, value]) => ({ name, value }));
+        
+        const expensesByCategory = paymentsInPeriod.reduce((acc, payment) => {
+            acc[payment.category] = (acc[payment.category] || 0) + payment.amount;
+            return acc;
+        }, {});
+        
+        const expensesChartData = Object.entries(expensesByCategory)
+             .map(([name, value]) => ({ name, value }));
+
+        const overdueReceivables = orders.filter(o => 
+            o.status === 'Concluído' && 
+            !o.isPaid && 
+            new Date(o.deliveryDate) < new Date()
+        ).sort((a,b) => new Date(a.deliveryDate) - new Date(b.deliveryDate));
+
+        setData({
+            kpis: { grossRevenue, realizedRevenue, totalExpenses, netProfit },
+            charts: { topClients, expensesChartData },
+            overdueReceivables
+        });
+        
+        setLoading(false);
+    }, [period, orders, payments]);
+
+    if (loading || !data) {
+        return <Spinner />;
+    }
+
+    return (
+        <div className="animate-fade-in space-y-6">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                <h1 className="text-3xl font-bold text-gray-800">Dashboard Financeiro</h1>
+                <div className="flex items-center gap-2">
+                    <select value={period} onChange={e => setPeriod(e.target.value)} className="bg-white border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500">
+                        <option value="thisMonth">Este Mês</option>
+                        <option value="last30days">Últimos 30 Dias</option>
+                        <option value="thisYear">Este Ano</option>
+                    </select>
+                     <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Lançamentos</Button>
+                </div>
+            </div>
+
+            {/* KPIs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                 <StatCard icon={<LucideClipboardEdit size={40} className="text-purple-500" />} label="Faturamento Bruto" value={`R$ ${data.kpis.grossRevenue.toFixed(2)}`} color="border-purple-500" />
+                 <StatCard icon={<LucideDollarSign size={40} className="text-green-500" />} label="Receita Realizada" value={`R$ ${data.kpis.realizedRevenue.toFixed(2)}`} color="border-green-500" />
+                 <StatCard icon={<LucideDollarSign size={40} className="text-red-500" />} label="Despesas Totais" value={`R$ ${data.kpis.totalExpenses.toFixed(2)}`} color="border-red-500" />
+                 <StatCard icon={<LucideBarChart3 size={40} className={data.kpis.netProfit >= 0 ? "text-blue-500" : "text-gray-500"} />} label="Lucro Líquido (Saldo)" value={`R$ ${data.kpis.netProfit.toFixed(2)}`} color={data.kpis.netProfit >= 0 ? "border-blue-500" : "border-gray-500"} />
+            </div>
+
+            {/* Gráficos de Pizza */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white p-6 rounded-2xl shadow-md">
+                    <h2 className="text-xl font-bold text-gray-700 mb-4">Top 5 Clientes (por Faturamento)</h2>
+                     <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                            <Pie data={data.charts.topClients} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
+                                {data.charts.topClients.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                            </Pie>
+                            <Tooltip formatter={(value) => `R$ ${value.toFixed(2)}`} />
+                            <Legend />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </div>
+                 <div className="bg-white p-6 rounded-2xl shadow-md">
+                    <h2 className="text-xl font-bold text-gray-700 mb-4">Despesas por Categoria</h2>
+                    <ResponsiveContainer width="100%" height={300}>
+                         <PieChart>
+                            <Pie data={data.charts.expensesChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
+                                {data.charts.expensesChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                            </Pie>
+                            <Tooltip formatter={(value) => `R$ ${value.toFixed(2)}`} />
+                            <Legend />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
+            {/* Tabela de Contas a Receber Vencidas */}
+            <div className="bg-white p-6 rounded-2xl shadow-md">
+                <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
+                    <LucideAlertTriangle className="text-red-500" /> Contas a Receber Vencidas
+                </h2>
+                {data.overdueReceivables.length > 0 ? (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left text-gray-500">
+                             <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3">Nº O.S.</th>
+                                    <th scope="col" className="px-6 py-3">Cliente</th>
+                                    <th scope="col" className="px-6 py-3">Data de Entrega</th>
+                                    <th scope="col" className="px-6 py-3 text-right">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {data.overdueReceivables.map(order => (
+                                    <tr key={order.id} className="bg-white border-b hover:bg-red-50">
+                                        <td className="px-6 py-4 font-medium text-gray-900">#{order.number}</td>
+                                        <td className="px-6 py-4">{order.clientName}</td>
+                                        <td className="px-6 py-4 text-red-600">{new Date(order.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                        <td className="px-6 py-4 text-right font-bold">R$ {order.totalValue.toFixed(2)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <p className="text-center text-gray-500 py-4">Nenhuma conta vencida. Bom trabalho!</p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+// ... (componente LoginScreen) ...
 const LoginScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [isPasswordReset, setIsPasswordReset] = useState(false);
@@ -2378,6 +2558,8 @@ const LoginScreen = () => {
 };
 
 
+// ... (componente LoginScreen) ...
+
 const AppLayout = ({ user, userProfile }) => {
     const [activePage, setActivePage] = useState('dashboard');
     const [clients, setClients] = useState([]);
@@ -2388,6 +2570,9 @@ const AppLayout = ({ user, userProfile }) => {
     const [inventory, setInventory] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [companyProfile, setCompanyProfile] = useState(null);
+    // --- NOVA LINHA: Adicionar estado para pagamentos ---
+    const [payments, setPayments] = useState([]);
+
 
     useEffect(() => {
         if (!user) return;
@@ -2399,6 +2584,8 @@ const AppLayout = ({ user, userProfile }) => {
             priceTables: setPriceTables,
             inventory: setInventory,
             suppliers: setSuppliers,
+            // --- NOVA LINHA: Adicionar coleção de pagamentos à busca ---
+            payments: setPayments,
         };
         const unsubscribers = Object.entries(collections).map(([name, setter]) => {
             const q = query(collection(db, `artifacts/${appId}/users/${user.uid}/${name}`));
@@ -2428,7 +2615,11 @@ const AppLayout = ({ user, userProfile }) => {
         }
     };
 
+    // --- LÓGICA DE RENDERIZAÇÃO ATUALIZADA ---
     const renderPage = () => {
+        // Mapear a página ativa para o item de menu correto
+        const navPage = activePage.startsWith('financials') ? 'financials' : activePage;
+
         switch (activePage) {
             case 'dashboard':
                 return <Dashboard setActivePage={setActivePage} serviceOrders={serviceOrders} inventory={inventory} />;
@@ -2634,8 +2825,14 @@ const AppLayout = ({ user, userProfile }) => {
                 return <PriceTables userId={user.uid} services={services} companyProfile={companyProfile} />;
             case 'service-orders':
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
+            
+            // --- Rota para o novo Dashboard ---
             case 'financials':
-                return <Financials userId={user.uid} orders={serviceOrders} companyProfile={companyProfile} />;
+                return <FinancialDashboard orders={serviceOrders} payments={payments} setActivePage={setActivePage} />;
+            // --- Rota para a antiga tela de Lançamentos ---
+            case 'financials-ledger':
+                 return <Financials userId={user.uid} orders={serviceOrders} companyProfile={companyProfile} />;
+            
             case 'reports':
                 return <Reports orders={serviceOrders} employees={employees} clients={clients} />;
             case 'user-management':
@@ -2647,21 +2844,27 @@ const AppLayout = ({ user, userProfile }) => {
         }
     };
 
-    const NavItem = ({ icon, label, page, activePage, setActivePage }) => (
-        <li>
-            <a
-                href="#"
-                onClick={(e) => { e.preventDefault(); setActivePage(page); }}
-                className={`flex items-center p-3 text-base font-normal rounded-lg transition-all duration-200 ${activePage === page
-                        ? 'bg-indigo-600 text-white shadow-lg'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-            >
-                {icon}
-                <span className="ml-3 flex-1 whitespace-nowrap">{label}</span>
-            </a>
-        </li>
-    );
+    const NavItem = ({ icon, label, page, activePage, setActivePage }) => {
+         // --- Lógica para manter o item de menu "Financeiro" ativo ---
+        const isFinancialPage = page === 'financials' && activePage.startsWith('financials');
+        const isActive = activePage === page || isFinancialPage;
+
+        return (
+            <li>
+                <a
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); setActivePage(page); }}
+                    className={`flex items-center p-3 text-base font-normal rounded-lg transition-all duration-200 ${isActive
+                            ? 'bg-indigo-600 text-white shadow-lg'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                >
+                    {icon}
+                    <span className="ml-3 flex-1 whitespace-nowrap">{label}</span>
+                </a>
+            </li>
+        )
+    };
 
     return (
         <div className="flex h-screen bg-gray-100 font-sans">
@@ -2703,6 +2906,8 @@ const AppLayout = ({ user, userProfile }) => {
         </div>
     );
 };
+
+// ... (componente App)
 
 export default function App() {
     const [user, setUser] = useState(null);
