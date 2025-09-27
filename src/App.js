@@ -2607,6 +2607,8 @@ const LoginScreen = () => {
 
 // ... (componente LoginScreen) ...
 
+// Localize e substitua todo o seu componente AppLayout por este:
+
 const AppLayout = ({ user, userProfile }) => {
     const [activePage, setActivePage] = useState('dashboard');
     const [clients, setClients] = useState([]);
@@ -2617,7 +2619,6 @@ const AppLayout = ({ user, userProfile }) => {
     const [inventory, setInventory] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [companyProfile, setCompanyProfile] = useState(null);
-    // --- NOVA LINHA: Adicionar estado para pagamentos ---
     const [payments, setPayments] = useState([]);
 
 
@@ -2631,7 +2632,6 @@ const AppLayout = ({ user, userProfile }) => {
             priceTables: setPriceTables,
             inventory: setInventory,
             suppliers: setSuppliers,
-            // --- NOVA LINHA: Adicionar coleção de pagamentos à busca ---
             payments: setPayments,
         };
         const unsubscribers = Object.entries(collections).map(([name, setter]) => {
@@ -2662,9 +2662,7 @@ const AppLayout = ({ user, userProfile }) => {
         }
     };
 
-    // --- LÓGICA DE RENDERIZAÇÃO ATUALIZADA ---
     const renderPage = () => {
-        // Mapear a página ativa para o item de menu correto
         const navPage = activePage.startsWith('financials') ? 'financials' : activePage;
 
         switch (activePage) {
@@ -2873,12 +2871,11 @@ const AppLayout = ({ user, userProfile }) => {
             case 'service-orders':
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
             
-            // --- Rota para o novo Dashboard ---
             case 'financials':
                 return <FinancialDashboard orders={serviceOrders} payments={payments} setActivePage={setActivePage} />;
-            // --- Rota para a antiga tela de Lançamentos ---
             case 'financials-ledger':
-                 return <Financials userId={user.uid} orders={serviceOrders} companyProfile={companyProfile} />;
+                 // --- CORREÇÃO: Adicionando a prop setActivePage que estava faltando ---
+                 return <Financials userId={user.uid} orders={serviceOrders} companyProfile={companyProfile} setActivePage={setActivePage} />;
             
             case 'reports':
                 return <Reports orders={serviceOrders} employees={employees} clients={clients} />;
@@ -2892,7 +2889,6 @@ const AppLayout = ({ user, userProfile }) => {
     };
 
     const NavItem = ({ icon, label, page, activePage, setActivePage }) => {
-         // --- Lógica para manter o item de menu "Financeiro" ativo ---
         const isFinancialPage = page === 'financials' && activePage.startsWith('financials');
         const isActive = activePage === page || isFinancialPage;
 
