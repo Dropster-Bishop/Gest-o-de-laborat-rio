@@ -1862,7 +1862,9 @@ const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
     );
 };
 
-const Financials = ({ userId, orders, companyProfile }) => {
+// Localize o componente Financials e substitua por este:
+
+const Financials = ({ userId, orders, companyProfile, setActivePage }) => {
     const [activeTab, setActiveTab] = useState('summary');
     const [payments, setPayments] = useState([]);
     const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -2127,7 +2129,14 @@ const Financials = ({ userId, orders, companyProfile }) => {
 
     return (
         <div className="animate-fade-in">
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Gestão Financeira</h1>
+            {/* --- BOTÃO VOLTAR ADICIONADO AQUI --- */}
+            <div className="flex justify-between items-center mb-6">
+                 <h1 className="text-3xl font-bold text-gray-800">Lançamentos Financeiros</h1>
+                 <Button onClick={() => setActivePage('financials')} variant="secondary">
+                     Voltar ao Dashboard
+                 </Button>
+            </div>
+            
             <div className="mb-6">
                 <div className="border-b border-gray-200">
                     <nav className="-mb-px flex space-x-8" aria-label="Tabs">
@@ -2215,41 +2224,54 @@ const Settings = ({ userId, initialProfile }) => {
 // ... (final do componente Settings) ...
 
 // --- NOVO COMPONENTE: FinancialDashboard ---
+// Localize o componente FinancialDashboard e substitua por este:
+
 const FinancialDashboard = ({ orders, payments, setActivePage }) => {
     const [period, setPeriod] = useState('thisMonth');
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // Importar componentes da Recharts. Adicione esta linha no topo do seu arquivo App.js
-    // import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-    // Para simplificar, vamos assumir que a biblioteca está disponível globalmente neste escopo.
-    
+    const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } = window.Recharts;
+
     const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF'];
 
-    useEffect(() => {
+    // --- LÓGICA DE FILTRO ATUALIZADA ---
+    const handleFilter = () => {
         setLoading(true);
 
+        let startDate, endDate;
         const now = new Date();
-        let startDate, endDate = new Date();
 
-        switch (period) {
-            case 'last30days':
-                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
-                break;
-            case 'thisYear':
-                startDate = new Date(now.getFullYear(), 0, 1);
-                endDate = new Date(now.getFullYear(), 11, 31);
-                break;
-            case 'thisMonth':
-            default:
-                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        if (period === 'custom') {
+            if (!customStartDate || !customEndDate) {
+                alert("Por favor, selecione as datas de início e fim para o período customizado.");
+                setLoading(false);
+                return;
+            }
+            startDate = new Date(customStartDate);
+            endDate = new Date(customEndDate);
+        } else {
+            switch (period) {
+                case 'last30days':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+                    endDate = new Date();
+                    break;
+                case 'thisYear':
+                    startDate = new Date(now.getFullYear(), 0, 1);
+                    endDate = new Date(now.getFullYear(), 11, 31);
+                    break;
+                case 'thisMonth':
+                default:
+                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                    endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            }
         }
 
         startDate.setHours(0, 0, 0, 0);
         endDate.setHours(23, 59, 59, 999);
-
-        // Filtrar dados baseados no período
+        
         const completedOrdersInPeriod = orders.filter(o => {
             const completionDate = new Date(o.completionDate);
             return o.status === 'Concluído' && completionDate >= startDate && completionDate <= endDate;
@@ -2260,13 +2282,11 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
             return paymentDate >= startDate && paymentDate <= endDate;
         });
         
-        // --- Cálculos de KPIs ---
         const grossRevenue = completedOrdersInPeriod.reduce((sum, o) => sum + o.totalValue, 0);
         const realizedRevenue = completedOrdersInPeriod.filter(o => o.isPaid).reduce((sum, o) => sum + o.totalValue, 0);
         const totalExpenses = paymentsInPeriod.reduce((sum, p) => sum + p.amount, 0);
         const netProfit = realizedRevenue - totalExpenses;
 
-        // --- Dados para Gráficos ---
         const revenueByClient = completedOrdersInPeriod.reduce((acc, order) => {
             acc[order.clientName] = (acc[order.clientName] || 0) + order.totalValue;
             return acc;
@@ -2298,7 +2318,20 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
         });
         
         setLoading(false);
-    }, [period, orders, payments]);
+    }
+    
+    // Roda o filtro uma vez ao carregar e sempre que as ordens ou pagamentos mudarem
+    useEffect(() => {
+        handleFilter();
+    }, [orders, payments]);
+    
+    // Limpa as datas customizadas quando um período pré-definido é selecionado
+    useEffect(() => {
+        if (period !== 'custom') {
+            setCustomStartDate('');
+            setCustomEndDate('');
+        }
+    }, [period]);
 
     if (loading || !data) {
         return <Spinner />;
@@ -2308,14 +2341,29 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
         <div className="animate-fade-in space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <h1 className="text-3xl font-bold text-gray-800">Dashboard Financeiro</h1>
-                <div className="flex items-center gap-2">
-                    <select value={period} onChange={e => setPeriod(e.target.value)} className="bg-white border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500">
-                        <option value="thisMonth">Este Mês</option>
-                        <option value="last30days">Últimos 30 Dias</option>
-                        <option value="thisYear">Este Ano</option>
-                    </select>
-                     <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Lançamentos</Button>
-                </div>
+                <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Lançamentos</Button>
+            </div>
+            
+            {/* --- SEÇÃO DE FILTROS ATUALIZADA --- */}
+            <div className="bg-white p-4 rounded-2xl shadow-md flex flex-col md:flex-row items-center gap-4">
+                 <div className="flex-1">
+                     <label htmlFor="period-select" className="block text-sm font-medium text-gray-700 mb-1">Período Rápido</label>
+                     <select id="period-select" value={period} onChange={e => setPeriod(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500">
+                         <option value="thisMonth">Este Mês</option>
+                         <option value="last30days">Últimos 30 Dias</option>
+                         <option value="thisYear">Este Ano</option>
+                         <option value="custom">Customizado</option>
+                     </select>
+                 </div>
+                 {period === 'custom' && (
+                     <>
+                        <Input label="Data de Início" type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
+                        <Input label="Data de Fim" type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
+                     </>
+                 )}
+                 <div className="self-end">
+                    <Button onClick={handleFilter} className="h-11">Filtrar</Button>
+                 </div>
             </div>
 
             {/* KPIs */}
