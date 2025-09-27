@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+
 // --- Dependências ---
 import { initializeApp } from 'firebase/app';
 import {
@@ -2222,8 +2223,7 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
     // Importar componentes da Recharts. Adicione esta linha no topo do seu arquivo App.js
     // import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
     // Para simplificar, vamos assumir que a biblioteca está disponível globalmente neste escopo.
-    const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } = window.Recharts;
-
+    
     const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF'];
 
     useEffect(() => {
