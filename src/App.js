@@ -2893,7 +2893,11 @@ const AppLayout = ({ user, userProfile }) => {
 
     return (
         <div className="flex h-screen bg-black text-white">
-            <aside className="w-64 bg-neutral-900 shadow-lg flex-shrink-0 flex flex-col">
+            {/* * AQUI ESTÁ A CORREÇÃO:
+              * 1. Adicionado `justify-between` ao <aside> para distribuir o espaço.
+              * 2. Removido `mt-auto` do <div> do botão de logout.
+            */}
+            <aside className="w-64 bg-neutral-900 shadow-lg flex-shrink-0 flex flex-col justify-between">
                 <div>
                     <div className="flex items-center justify-center h-20 border-b border-neutral-800">
                         <LucideClipboardEdit className="h-8 w-8 text-yellow-500" />
@@ -2918,7 +2922,7 @@ const AppLayout = ({ user, userProfile }) => {
                         </ul>
                     </div>
                 </div>
-                <div className="mt-auto p-4 border-t border-neutral-800">
+                <div className="p-4 border-t border-neutral-800">
                     <button onClick={handleLogout} className="w-full flex items-center p-3 text-base font-normal rounded-lg text-neutral-300 hover:bg-red-800 hover:text-red-200 transition-all duration-200">
                         <LucideLogOut size={20} />
                         <span className="ml-3">Sair</span>
@@ -2931,7 +2935,6 @@ const AppLayout = ({ user, userProfile }) => {
         </div>
     );
 };
-
 
 export default function App() {
     const [user, setUser] = useState(null);
