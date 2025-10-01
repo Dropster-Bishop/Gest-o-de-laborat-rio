@@ -23,7 +23,10 @@ import {
     serverTimestamp,
     setDoc,
     getDoc,
-    writeBatch
+    writeBatch,
+    where, // Adicionado para a nova lógica
+    getDocs, // Adicionado para a nova lógica
+    orderBy // Adicionado para a nova lógica
 } from 'firebase/firestore';
 import {
     LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered,
@@ -712,24 +715,12 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         if (!userId) return;
         if (window.confirm('Tem certeza que deseja excluir esta ordem de serviço?')) {
             try {
+                // ATENÇÃO: A lógica para excluir o débito correspondente deveria ser adicionada aqui.
                 const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, id);
                 await deleteDoc(docRef);
             } catch (error) {
                 console.error("Error deleting service order: ", error);
             }
-        }
-    };
-
-    const handleMarkAsPaid = async (orderId, isPaid) => {
-        if (!userId) return;
-        const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
-        try {
-            await updateDoc(docRef, { isPaid });
-            const orderNumber = orders.find(o => o.id === orderId).number;
-            alert(`O.S. #${orderNumber} marcada como ${isPaid ? 'Paga' : 'Não Paga'}.`);
-        } catch (error) {
-            console.error("Erro ao atualizar status de pagamento: ", error);
-            alert("Não foi possível atualizar o status de pagamento.");
         }
     };
 
@@ -790,19 +781,51 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
     const handlePrint = () => generatePdf('print');
     const handleSaveAsPdf = () => generatePdf('save');
 
+    // ##################################################################
+    // ## INÍCIO DA ALTERAÇÃO: Lógica para criar débito na conta corrente
+    // ##################################################################
     const handleStatusChange = async (orderId, newStatus) => {
         if (!userId) return;
-        const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
+        const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
         try {
             const updateData = { status: newStatus };
+    
             if (newStatus === 'Concluído') {
-                updateData.completionDate = new Date().toISOString().split('T')[0];
+                const completionDate = new Date().toISOString().split('T')[0];
+                updateData.completionDate = completionDate;
+                
+                const order = orders.find(o => o.id === orderId);
+                if (order && order.totalValue > 0) {
+                    const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
+                    
+                    // Verifica se já não existe um débito para esta O.S. para evitar duplicidade
+                    const q = query(transactionRef, where("orderId", "==", orderId), where("type", "==", "debit"));
+                    const existingDebitSnapshot = await getDocs(q);
+    
+                    if (existingDebitSnapshot.empty) {
+                        await addDoc(transactionRef, {
+                            clientId: order.clientId,
+                            clientName: order.clientName,
+                            type: 'debit',
+                            amount: order.totalValue,
+                            date: completionDate,
+                            description: `Referente à O.S. #${order.number} - Paciente: ${order.patientName}`,
+                            orderId: order.id,
+                            createdAt: serverTimestamp()
+                        });
+                    }
+                }
             }
-            await updateDoc(docRef, updateData);
+    
+            await updateDoc(orderRef, updateData);
         } catch (error) {
             console.error("Error updating status: ", error);
         }
     };
+    // ##################################################################
+    // ## FIM DA ALTERAÇÃO
+    // ##################################################################
+
 
     const getStatusClasses = (status) => {
         switch (status) {
@@ -900,13 +923,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                             <button onClick={() => handleOpenViewModal(order)} title="Visualizar" className="text-yellow-500 hover:text-yellow-400 p-1"><LucideSearch size={18} /></button>
                                             <button onClick={() => handleOpenModal(order)} title="Editar" className="text-blue-400 hover:text-blue-300 p-1"><LucideEdit size={18} /></button>
                                             <button onClick={() => handleDelete(order.id)} title="Excluir" className="text-red-500 hover:text-red-400 p-1"><LucideTrash2 size={18} /></button>
-                                            {order.status === 'Concluído' && (
-                                                <button onClick={() => handleMarkAsPaid(order.id, !order.isPaid)}
-                                                    title={order.isPaid ? 'Marcar como Não Pago' : 'Marcar como Pago'}
-                                                    className={`p-1 rounded-full ${order.isPaid ? 'text-green-500 hover:bg-green-900' : 'text-neutral-500 hover:bg-neutral-700'}`}>
-                                                    <LucideDollarSign size={18} />
-                                                </button>
-                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -1663,511 +1679,203 @@ const UserManagement = ({ userId }) => {
     );
 };
 
-const PaymentForm = ({ onSubmit, payment }) => {
-    const [description, setDescription] = useState(payment?.description || '');
-    const [amount, setAmount] = useState(payment?.amount || '');
-    const [category, setCategory] = useState(payment?.category || 'Materiais');
-    const [paymentDate, setPaymentDate] = useState(payment?.paymentDate || new Date().toISOString().split('T')[0]);
+// ##################################################################
+// ## NOVO COMPONENTE: Conta Corrente do Cliente (substitui Financials)
+// ##################################################################
+const ClientAccounts = ({ userId, clients, orders }) => {
+    const [accounts, setAccounts] = useState([]);
+    const [selectedClient, setSelectedClient] = useState(null);
+    const [transactions, setTransactions] = useState([]);
+    const [isCreditModalOpen, setCreditModalOpen] = useState(false);
+    const [loading, setLoading] = useState(true);
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onSubmit({
-            description,
-            amount: parseFloat(amount),
-            category,
-            paymentDate
-        });
-    };
-
-    return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <Input label="Descrição" value={description} onChange={e => setDescription(e.target.value)} required />
-            <Input label="Valor (R$)" type="number" value={amount} onChange={e => setAmount(e.target.value)} required step="0.01" />
-            <div>
-                <label htmlFor="category" className="block text-sm font-medium text-neutral-300 mb-1">Categoria</label>
-                <select id="category" value={category} onChange={e => setCategory(e.target.value)} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg">
-                    <option>Materiais</option>
-                    <option>Salários</option>
-                    <option>Fornecedores (Dentais)</option>
-                    <option>Contas (Água, Luz, etc.)</option>
-                    <option>Impostos</option>
-                    <option>Outros</option>
-                </select>
-            </div>
-            <Input label="Data do Pagamento" type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required />
-            <div className="flex justify-end gap-3 pt-4">
-                <Button type="submit" variant="primary">Salvar</Button>
-            </div>
-        </form>
-    );
-}
-
-const ReceiptModal = ({ receiptData, companyProfile, onClose }) => {
-    const receiptRef = useRef();
-    
-    const numberToWords = (num) => {
-        if (num === null || num === undefined) return 'zero reais';
-        
-        num = parseFloat(num);
-        if (isNaN(num)) return 'zero reais';
-
-        if (num === 0) return 'zero reais';
-
-        const inteiro = Math.floor(num);
-        const centavos = Math.round((num - inteiro) * 100);
-
-        const extenso = (n) => {
-            if (n === 0) return '';
-            
-            const unidades = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
-            const especiais = ['dez', 'onze', 'doze', 'treze', 'catorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
-            const dezenas = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
-            const centenas = ['', 'cem', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
-
-            if (n < 10) return unidades[n];
-            if (n < 20) return especiais[n - 10];
-            if (n < 100) {
-                return dezenas[Math.floor(n / 10)] + (n % 10 !== 0 ? ' e ' + unidades[n % 10] : '');
-            }
-            if (n === 100) return 'cem';
-            if (n < 1000) {
-                return centenas[Math.floor(n / 100)].replace('cem', 'cento') + (n % 100 !== 0 ? ' e ' + extenso(n % 100) : '');
-            }
-            if (n < 1000000) {
-                const milhar = Math.floor(n / 1000);
-                const resto = n % 1000;
-                const milharStr = milhar === 1 ? 'mil' : extenso(milhar) + ' mil';
-                
-                if (resto === 0) return milharStr;
-                if (resto < 100 || resto % 100 === 0) return milharStr + ' e ' + extenso(resto);
-                return milharStr + ' ' + extenso(resto);
-            }
-            if (n < 1000000000) {
-                const milhao = Math.floor(n / 1000000);
-                const resto = n % 1000000;
-                const milhaoStr = milhao === 1 ? 'um milhão' : extenso(milhao) + ' milhões';
-
-                if (resto === 0) return milhaoStr;
-                return milhaoStr + ' e ' + extenso(resto);
-            }
-
-            return '';
+    // Carrega as transações e calcula os saldos
+    useEffect(() => {
+        if (!userId || clients.length === 0) {
+            setLoading(false);
+            return;
         };
 
-        let resultado = '';
-        if (inteiro > 0) {
-            resultado += extenso(inteiro) + (inteiro === 1 ? ' real' : ' reais');
-        }
+        const transactionsRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
+        const unsubscribe = onSnapshot(transactionsRef, (snapshot) => {
+            const allTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        if (centavos > 0) {
-            if (inteiro > 0) {
-                resultado += ' e ';
-            }
-            resultado += extenso(centavos) + (centavos === 1 ? ' centavo' : ' centavos');
-        }
-        
-        return resultado.trim();
-    };
+            const accountsData = clients.map(client => {
+                const clientTransactions = allTransactions.filter(t => t.clientId === client.id);
+                const totalCredit = clientTransactions
+                    .filter(t => t.type === 'credit')
+                    .reduce((sum, t) => sum + t.amount, 0);
+                const totalDebit = clientTransactions
+                    .filter(t => t.type === 'debit')
+                    .reduce((sum, t) => sum + t.amount, 0);
+                
+                return {
+                    ...client,
+                    balance: totalCredit - totalDebit
+                };
+            }).sort((a, b) => a.name.localeCompare(b.name));
 
-    const generatePdf = (action = 'print') => {
-        const input = receiptRef.current;
-        if (!input || !window.html2canvas || !window.jspdf) return;
-
-        window.html2canvas(input, { scale: 2 }).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-
-            if (action === 'print') {
-                pdf.autoPrint();
-                window.open(pdf.output('bloburl'), '_blank');
-            } else {
-                pdf.save(`recibo_${receiptData?.receiptNumber}.pdf`);
-            }
-        });
-    };
-
-    return (
-        <Modal onClose={onClose} title={`Recibo - Cliente: ${receiptData?.clientName}`} size="4xl">
-            <div className="p-2 bg-neutral-200">
-                <div ref={receiptRef} className="bg-white p-8 border text-black" style={{ width: '210mm', minHeight: '297mm', margin: 'auto' }}>
-                    <header className="flex justify-between items-start pb-4 border-b">
-                        <div>
-                            <h1 className="text-2xl font-bold text-neutral-800">{companyProfile?.companyName || 'Nome da Empresa'}</h1>
-                            <p className="text-sm text-neutral-600">{companyProfile?.companyAddress || 'Endereço da Empresa'}</p>
-                            <p className="text-sm text-neutral-600">CNPJ: {companyProfile?.companyCnpj || '00.000.000/0000-00'}</p>
-                            <p className="text-sm text-neutral-600">Tel: {companyProfile?.companyPhone || '(00) 00000-0000'}</p>
-                        </div>
-                        <div className="text-right">
-                            <h2 className="text-xl font-bold text-neutral-700">RECIBO DE PAGAMENTO</h2>
-                            <p className="text-md font-semibold">O.S. Nº: <span className="text-red-600">{receiptData?.receiptNumber}</span></p>
-                            <p className="text-xl font-bold mt-2">R$ {(receiptData?.totalValue || 0).toFixed(2)}</p>
-                        </div>
-                    </header>
-
-                    <main className="mt-8">
-                        <div className="mb-8">
-                            <p className="text-md leading-relaxed">
-                                Recebemos de <strong className="font-bold">{receiptData?.clientName || 'Cliente não informado'}</strong>, CNPJ/CPF nº <strong>{receiptData?.clientDocument || 'Não informado'}</strong>,
-                                a importância de <strong className="font-bold capitalize">{numberToWords(receiptData?.totalValue)}</strong>,
-                                referente aos serviços de prótese dentária detalhados abaixo.
-                            </p>
-                        </div>
-
-                        <h3 className="font-bold mb-2 border-b pb-1">DETALHAMENTO DOS SERVIÇOS</h3>
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="text-left font-bold bg-neutral-100">
-                                    <th className="p-2">Descrição do Serviço (O.S. / Paciente)</th>
-                                    <th className="p-2 text-center">Qtd.</th>
-                                    <th className="p-2 text-right">Valor Unit.</th>
-                                    <th className="p-2 text-right">Subtotal</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {(receiptData?.orders || []).flatMap(order => order.services.map(service => ({ ...service, order }))).map((item, index) => (
-                                    <tr key={index} className="border-b">
-                                        <td className="p-2">{item.name} (O.S. #{item.order.number} / {item.order.patientName})</td>
-                                        <td className="p-2 text-center">{item.quantity || 1}</td>
-                                        <td className="p-2 text-right">R$ {(item.price || 0).toFixed(2)}</td>
-                                        <td className="p-2 text-right">R$ {((item.price || 0) * (item.quantity || 1)).toFixed(2)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                            <tfoot>
-                                <tr className="font-bold">
-                                    <td colSpan="3" className="p-2 text-right">VALOR TOTAL</td>
-                                    <td className="p-2 text-right">R$ {(receiptData?.totalValue || 0).toFixed(2)}</td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </main>
-
-                    <footer className="mt-16 text-center text-sm text-neutral-600">
-                        <p>{companyProfile?.companyAddress?.split(',')[0] || 'Sua Cidade'}, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.</p>
-                        <div className="mt-16 pt-4 border-t w-1/2 mx-auto">
-                            <p className="font-bold">{companyProfile?.companyName || 'Nome da Empresa'}</p>
-                            <p>{companyProfile?.companyCnpj || '00.000.000/0000-00'}</p>
-                        </div>
-                    </footer>
-                </div>
-            </div>
-            <div className="flex justify-end gap-2 p-4 border-t border-neutral-700 bg-neutral-900">
-                <Button onClick={() => generatePdf('save')} variant="secondary"><LucideFileDown size={18} /> Salvar PDF</Button>
-                <Button onClick={() => generatePdf('print')}><LucidePrinter size={18} /> Imprimir</Button>
-            </div>
-        </Modal>
-    );
-};
-
-const Financials = ({ userId, orders, companyProfile, setActivePage }) => {
-    const [activeTab, setActiveTab] = useState('summary');
-    const [payments, setPayments] = useState([]);
-    const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
-    const [currentPayment, setCurrentPayment] = useState(null);
-    const [expandedClient, setExpandedClient] = useState(null);
-    const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
-    const [dataForReceipt, setDataForReceipt] = useState(null);
-
-    useEffect(() => {
-        if (!userId) return;
-
-        const paymentsQuery = query(collection(db, `artifacts/${appId}/users/${userId}/payments`));
-        const unsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setPayments(data);
+            setAccounts(accountsData);
+            setLoading(false);
         });
 
         return () => unsubscribe();
-    }, [userId]);
+    }, [userId, clients]);
 
-    const handleOpenPaymentModal = (payment = null) => {
-        setCurrentPayment(payment);
-        setPaymentModalOpen(true);
-    };
-
-    const handleClosePaymentModal = () => {
-        setCurrentPayment(null);
-        setPaymentModalOpen(false);
-    };
-
-    const handleSavePayment = async (paymentData) => {
+    // Busca o extrato do cliente selecionado
+    const handleSelectClient = async (client) => {
         if (!userId) return;
-        try {
-            const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/payments`);
-            if (currentPayment) {
-                const docRef = doc(db, collectionRef.path, currentPayment.id);
-                await updateDoc(docRef, paymentData);
-            } else {
-                await addDoc(collectionRef, { ...paymentData, createdAt: serverTimestamp() });
-            }
-            handleClosePaymentModal();
-        } catch (error) {
-            console.error("Erro ao salvar pagamento:", error);
-            alert("Falha ao salvar pagamento.");
-        }
+        
+        // Atualiza o estado imediatamente para o feedback visual
+        setSelectedClient(client);
+
+        const transactionsRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
+        const q = query(transactionsRef, where("clientId", "==", client.id), orderBy("date", "desc"), orderBy("createdAt", "desc"));
+        
+        const snapshot = await getDocs(q);
+        const clientTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setTransactions(clientTransactions);
     };
 
-    const handleDeletePayment = async (paymentId) => {
-        if (!userId) return;
-        if (window.confirm('Tem certeza que deseja excluir este pagamento?')) {
-            try {
-                const docRef = doc(db, `artifacts/${appId}/users/${userId}/payments`, paymentId);
-                await deleteDoc(docRef);
-            } catch (error) {
-                console.error("Erro ao excluir pagamento:", error);
-                alert("Falha ao excluir pagamento.");
-            }
-        }
-    };
-
-    const markOrderAsPaid = async (order, isPaid) => {
-        if (!userId) return;
-        const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, order.id);
+    // Salva um novo crédito (pagamento)
+    const handleSaveCredit = async ({ amount, date, description }) => {
+        if (!userId || !selectedClient || !amount || !date) return;
+        
         try {
-            await updateDoc(docRef, { isPaid: isPaid });
+            const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
+            await addDoc(transactionRef, {
+                clientId: selectedClient.id,
+                clientName: selectedClient.name,
+                type: 'credit',
+                amount: parseFloat(amount),
+                date,
+                description: description || 'Adiantamento / Pagamento',
+                orderId: null,
+                createdAt: serverTimestamp()
+            });
+            // Re-fetch transactions for the currently selected client to show the update
+            handleSelectClient(selectedClient); 
+            setCreditModalOpen(false);
         } catch (error) {
-            console.error("Erro ao atualizar status de pagamento da O.S.:", error);
-        }
-    };
-
-    const handleReceiveFromClient = async (clientData) => {
-        if (!userId || !clientData.orders || clientData.orders.length === 0) return;
-
-        if (!window.confirm(`Confirma o recebimento de R$ ${clientData.totalDue.toFixed(2)} para ${clientData.clientName}?`)) {
-            return;
-        }
-
-        if (!companyProfile?.companyName) {
-            alert('Atenção: Os dados da sua empresa não estão preenchidos na aba "Configurações". O recibo pode sair incompleto.');
-        }
-
-        const batch = writeBatch(db);
-        clientData.orders.forEach(order => {
-            const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, order.id);
-            batch.update(docRef, { isPaid: true });
-        });
-
-        try {
-            await batch.commit();
-            alert(`Recebimento do cliente ${clientData.clientName} registrado com sucesso.`);
-
-            const receiptData = {
-                clientName: clientData.clientName,
-                clientDocument: clientData.orders[0]?.client?.document,
-                totalValue: clientData.totalDue,
-                orders: clientData.orders,
-                receiptNumber: clientData.orders.map(o => o.number).join(', ')
-            };
-            setDataForReceipt(receiptData);
-            setIsReceiptModalOpen(true);
-        } catch (error) {
-            console.error("Erro ao registrar recebimento em lote:", error);
-            alert("Falha ao registrar o recebimento.");
+            console.error("Erro ao adicionar crédito:", error);
+            alert("Não foi possível registrar o pagamento.");
         }
     };
     
-    const handleGenerateSecondCopy = (clientData) => {
-        if (!companyProfile?.companyName) {
-            alert('Atenção: Os dados da sua empresa não estão preenchidos na aba "Configurações". O recibo pode sair incompleto.');
-        }
-
-        const receiptData = {
-            clientName: clientData.clientName,
-            clientDocument: clientData.paidOrders[0]?.client?.document,
-            totalValue: clientData.totalPaid,
-            orders: clientData.paidOrders,
-            receiptNumber: clientData.paidOrders.map(o => o.number).join(', ')
-        };
-        setDataForReceipt(receiptData);
-        setIsReceiptModalOpen(true);
-    };
-
-    const handleCloseReceiptModal = () => {
-        setDataForReceipt(null);
-        setIsReceiptModalOpen(false);
-    };
-
-    const receivedOrders = orders.filter(o => o.status === 'Concluído' && o.isPaid);
-    const totalReceived = receivedOrders.reduce((sum, r) => sum + r.totalValue, 0);
-    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-    const balance = totalReceived - totalPaid;
-
-    const renderContent = () => {
-        switch (activeTab) {
-            case 'payments':
-                return (
-                    <div>
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold text-neutral-200">Pagamentos (Contas a Pagar)</h3>
-                            <Button onClick={() => handleOpenPaymentModal()}><LucidePlusCircle size={18} /> Novo Pagamento</Button>
-                        </div>
-                        <div className="bg-neutral-900 rounded-2xl shadow-md p-4">
-                            {payments.length > 0 ? payments.map(p => (
-                                <div key={p.id} className="grid grid-cols-5 gap-4 items-center p-3 border-b border-neutral-800 last:border-b-0 hover:bg-neutral-800">
-                                    <span className="col-span-2 text-white">{p.description}</span>
-                                    <span className="text-sm text-neutral-400">{p.category}</span>
-                                    <span className="font-bold text-red-400 text-right">- R$ {p.amount.toFixed(2)}</span>
-                                    <div className="flex justify-end gap-2">
-                                        <button onClick={() => handleOpenPaymentModal(p)} title="Editar" className="p-2 text-blue-400 hover:bg-blue-900 rounded-full"><LucideEdit size={18} /></button>
-                                        <button onClick={() => handleDeletePayment(p.id)} title="Excluir" className="p-2 text-red-500 hover:bg-red-900 rounded-full"><LucideTrash2 size={18} /></button>
-                                    </div>
-                                </div>
-                            )) : <p className="text-neutral-500 text-center py-4">Nenhum pagamento registrado.</p>}
-                        </div>
-                    </div>
-                );
-
-            case 'receivables':
-                const unpaidByClient = orders
-                    .filter(o => o.status === 'Concluído' && !o.isPaid)
-                    .reduce((acc, order) => {
-                        if (!acc[order.clientId]) {
-                            acc[order.clientId] = {
-                                clientName: order.clientName,
-                                totalDue: 0,
-                                orders: []
-                            };
-                        }
-                        acc[order.clientId].totalDue += order.totalValue;
-                        acc[order.clientId].orders.push(order);
-                        return acc;
-                    }, {});
-
-                const paidByClient = receivedOrders.reduce((acc, order) => {
-                    if (!acc[order.clientId]) {
-                        acc[order.clientId] = {
-                            clientName: order.clientName,
-                            totalPaid: 0,
-                            paidOrders: []
-                        };
-                    }
-                    acc[order.clientId].totalPaid += order.totalValue;
-                    acc[order.clientId].paidOrders.push(order);
-                    return acc;
-                }, {});
-
-                return (
-                    <div className="space-y-8">
-                        <div>
-                            <h3 className="text-xl font-bold text-neutral-200 mb-4">Contas a Receber (por Cliente)</h3>
-                            <div className="bg-neutral-900 rounded-2xl shadow-md p-4 space-y-3">
-                                {Object.keys(unpaidByClient).length > 0 ? Object.values(unpaidByClient).map((client, idx) => (
-                                    <div key={idx} className="flex justify-between items-center p-3 border border-neutral-800 rounded-lg hover:bg-neutral-800">
-                                        <div>
-                                            <p className="font-semibold text-white">{client.clientName}</p>
-                                            <p className="text-sm text-red-400">Total a receber: <span className="font-bold">R$ {client.totalDue.toFixed(2)}</span> ({client.orders.length} O.S.)</p>
-                                        </div>
-                                        <Button onClick={() => handleReceiveFromClient(client)}>Registrar Recebimento Total</Button>
-                                    </div>
-                                )) : <p className="text-neutral-500 text-center py-4">Nenhuma conta a receber pendente.</p>}
-                            </div>
-                        </div>
-
-                        <div>
-                            <h3 className="text-xl font-bold text-neutral-200 mb-4">Histórico de Recebimentos (por Cliente)</h3>
-                            <div className="bg-neutral-900 rounded-2xl shadow-md p-4 space-y-1">
-                                {Object.keys(paidByClient).length > 0 ? Object.values(paidByClient).sort((a, b) => a.clientName.localeCompare(b.clientName)).map((client, idx) => (
-                                    <div key={idx} className="border border-neutral-800 rounded-lg overflow-hidden">
-                                        <div className="w-full flex justify-between items-center p-4 bg-neutral-800">
-                                            <div onClick={() => setExpandedClient(expandedClient === client.clientName ? null : client.clientName)} className="flex-grow cursor-pointer">
-                                                <p className="font-semibold text-white">{client.clientName}</p>
-                                                <p className="text-sm text-green-400">Total recebido: <span className="font-bold">R$ {client.totalPaid.toFixed(2)}</span></p>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <Button
-                                                    onClick={() => handleGenerateSecondCopy(client)}
-                                                    variant="secondary"
-                                                    className="text-xs"
-                                                    title="Gerar 2ª via do recibo consolidado"
-                                                >
-                                                    <LucidePrinter size={14} /> 2ª Via Recibo Total
-                                                </Button>
-                                                <button onClick={() => setExpandedClient(expandedClient === client.clientName ? null : client.clientName)} className="p-2">
-                                                    <LucideChevronDown className={`transition-transform ${expandedClient === client.clientName ? 'rotate-180' : ''}`} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                        {expandedClient === client.clientName && (
-                                            <div className="p-4 bg-neutral-900">
-                                                <h4 className="text-sm font-bold text-neutral-300 mb-2">Ordens de Serviço Inclusas:</h4>
-                                                {client.paidOrders.sort((a, b) => new Date(b.completionDate) - new Date(a.completionDate)).map(order => (
-                                                    <div key={order.id} className="flex justify-between items-center py-2 border-b border-neutral-800 last:border-b-0">
-                                                        <div>
-                                                            <p>O.S. #{order.number} - R$ {order.totalValue.toFixed(2)}</p>
-                                                            <p className="text-sm text-neutral-400">Concluído em: {new Date(order.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <Button onClick={() => markOrderAsPaid(order, false)} variant="secondary" className="text-xs">Desfazer</Button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )) : <p className="text-neutral-500 text-center py-4">Nenhum recebimento registrado.</p>}
-                            </div>
-                        </div>
-                    </div>
-                );
-            default: // summary
-                return (
-                    <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <StatCard icon={<LucideDollarSign size={40} className="text-green-500" />} label="Total Recebido (O.S. Pagas)" value={`R$ ${totalReceived.toFixed(2)}`} color="border-green-500" />
-                            <StatCard icon={<LucideDollarSign size={40} className="text-red-500" />} label="Total Pago (Contas)" value={`R$ ${totalPaid.toFixed(2)}`} color="border-red-500" />
-                            <StatCard icon={<LucideDollarSign size={40} className={balance >= 0 ? "text-blue-500" : "text-neutral-500"} />} label="Saldo (Recebido - Pago)" value={`R$ ${balance.toFixed(2)}`} color={balance >= 0 ? "border-blue-500" : "border-neutral-500"} />
-                        </div>
-                    </div>
-                );
-        }
-    };
+    if (loading) return <Spinner />;
 
     return (
-        <div className="animate-fade-in">
-            <div className="flex justify-between items-center mb-6">
-                 <h1 className="text-3xl font-bold text-white">Lançamentos Financeiros</h1>
-                 <Button onClick={() => setActivePage('financials')} variant="secondary">
-                     Voltar ao Dashboard
-                 </Button>
-            </div>
-            
-            <div className="mb-6">
-                <div className="border-b border-neutral-700">
-                    <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                        <button onClick={() => setActiveTab('summary')} className={`${activeTab === 'summary' ? 'border-yellow-500 text-yellow-500' : 'border-transparent text-neutral-400 hover:text-neutral-200 hover:border-neutral-500'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
-                            Resumo
-                        </button>
-                        <button onClick={() => setActiveTab('receivables')} className={`${activeTab === 'receivables' ? 'border-yellow-500 text-yellow-500' : 'border-transparent text-neutral-400 hover:text-neutral-200 hover:border-neutral-500'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
-                            Recebimentos
-                        </button>
-                        <button onClick={() => setActiveTab('payments')} className={`${activeTab === 'payments' ? 'border-yellow-500 text-yellow-500' : 'border-transparent text-neutral-400 hover:text-neutral-200 hover:border-neutral-500'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
-                            Pagamentos
-                        </button>
-                    </nav>
+        <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Coluna da Esquerda: Lista de Clientes e Saldos */}
+            <div className="lg:col-span-1 bg-neutral-900 p-6 rounded-2xl shadow-md self-start">
+                <h2 className="text-xl font-bold text-white mb-4">Contas de Clientes</h2>
+                <div className="space-y-2 max-h-[75vh] overflow-y-auto">
+                    {accounts.map(acc => (
+                        <div key={acc.id} onClick={() => handleSelectClient(acc)}
+                             className={`p-3 rounded-lg cursor-pointer transition-colors border ${selectedClient?.id === acc.id ? 'bg-yellow-900 border-yellow-600' : 'bg-neutral-800 border-neutral-700 hover:bg-neutral-700'}`}>
+                            <div className="flex justify-between items-center">
+                                <span className="font-semibold text-white">{acc.name}</span>
+                                <span className={`font-bold text-lg ${acc.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    R$ {acc.balance.toFixed(2)}
+                                </span>
+                            </div>
+                            <p className="text-xs text-neutral-400">{acc.balance >= 0 ? 'Saldo Positivo' : 'Saldo Devedor'}</p>
+                        </div>
+                    ))}
                 </div>
             </div>
 
-            {renderContent()}
+            {/* Coluna da Direita: Detalhes e Extrato */}
+            <div className="lg:col-span-2 space-y-6">
+                {selectedClient ? (
+                    <div className="bg-neutral-900 p-6 rounded-2xl shadow-md">
+                        <header className="flex justify-between items-center mb-4 pb-4 border-b border-neutral-700">
+                            <div>
+                                <h2 className="text-2xl font-bold text-yellow-500">{selectedClient.name}</h2>
+                                <p className="text-neutral-300">Extrato de Conta Corrente</p>
+                            </div>
+                            <Button onClick={() => setCreditModalOpen(true)}>
+                                <LucidePlusCircle size={20} />
+                                Lançar Pagamento (Crédito)
+                            </Button>
+                        </header>
+                        
+                        <div className="max-h-[70vh] overflow-y-auto">
+                            <table className="w-full text-sm text-left text-neutral-400">
+                                <thead className="text-xs text-neutral-300 uppercase bg-neutral-800 sticky top-0">
+                                    <tr>
+                                        <th scope="col" className="px-6 py-3">Data</th>
+                                        <th scope="col" className="px-6 py-3">Descrição</th>
+                                        <th scope="col" className="px-6 py-3 text-right">Débito</th>
+                                        <th scope="col" className="px-6 py-3 text-right">Crédito</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {transactions.map(t => (
+                                        <tr key={t.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-neutral-800">
+                                            <td className="px-6 py-4">{new Date(t.date).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                            <td className="px-6 py-4">{t.description}</td>
+                                            <td className="px-6 py-4 text-right font-mono text-red-400">
+                                                {t.type === 'debit' ? `R$ ${t.amount.toFixed(2)}` : ''}
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-mono text-green-400">
+                                                {t.type === 'credit' ? `R$ ${t.amount.toFixed(2)}` : ''}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {transactions.length === 0 && (
+                                        <tr><td colSpan="4" className="text-center p-8 text-neutral-500">Nenhuma transação encontrada.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-neutral-900 p-12 rounded-2xl shadow-md text-center">
+                        <LucideSearch size={48} className="mx-auto text-neutral-600 mb-4" />
+                        <h3 className="text-xl font-bold text-neutral-300">Selecione um cliente</h3>
+                        <p className="text-neutral-500">Clique em um cliente na lista à esquerda para ver seu extrato detalhado.</p>
+                    </div>
+                )}
+            </div>
 
-            {isPaymentModalOpen && (
-                <Modal onClose={handleClosePaymentModal} title={currentPayment ? "Editar Pagamento" : "Novo Pagamento"}>
-                    <PaymentForm onSubmit={handleSavePayment} payment={currentPayment} />
+            {isCreditModalOpen && selectedClient && (
+                <Modal onClose={() => setCreditModalOpen(false)} title={`Lançar Pagamento para ${selectedClient.name}`}>
+                    <CreditForm onSubmit={handleSaveCredit} onCancel={() => setCreditModalOpen(false)} />
                 </Modal>
-            )}
-            {isReceiptModalOpen && (
-                <ReceiptModal
-                    receiptData={dataForReceipt}
-                    companyProfile={companyProfile}
-                    onClose={handleCloseReceiptModal}
-                />
             )}
         </div>
     );
 };
+
+// Componente auxiliar para o formulário de crédito
+const CreditForm = ({ onSubmit, onCancel }) => {
+    const [amount, setAmount] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [description, setDescription] = useState('');
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSubmit({ amount, date, description });
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <Input label="Valor do Pagamento (R$)" type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required autoFocus />
+            <Input label="Data do Pagamento" type="date" value={date} onChange={e => setDate(e.target.value)} required />
+            <Input label="Descrição (Opcional)" type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Ex: Pagamento semanal" />
+            <div className="flex justify-end gap-3 pt-4">
+                <Button type="button" onClick={onCancel} variant="secondary">Cancelar</Button>
+                <Button type="submit" variant="primary">Salvar Pagamento</Button>
+            </div>
+        </form>
+    );
+};
+
+// ##################################################################
+// ## FIM DO NOVO COMPONENTE
+// ##################################################################
+
 
 const Settings = ({ userId, initialProfile }) => {
     const [profile, setProfile] = useState(initialProfile || {});
@@ -2220,12 +1928,15 @@ const Settings = ({ userId, initialProfile }) => {
     );
 };
 
-const FinancialDashboard = ({ orders, payments, setActivePage }) => {
+const FinancialDashboard = ({ orders, setActivePage }) => {
     const [period, setPeriod] = useState('thisMonth');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+
+    // Este componente pode precisar de ajustes futuros para refletir o novo sistema
+    // Por enquanto, vamos manter a lógica de faturamento bruto e por cliente
 
     const COLORS = ['#D4AF37', '#B8860B', '#8B6914', '#FFD700', '#F0E68C'];
 
@@ -2267,16 +1978,8 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
             const completionDate = new Date(o.completionDate);
             return o.status === 'Concluído' && completionDate >= startDate && completionDate <= endDate;
         });
-
-        const paymentsInPeriod = payments.filter(p => {
-            const paymentDate = new Date(p.paymentDate);
-            return paymentDate >= startDate && paymentDate <= endDate;
-        });
         
         const grossRevenue = completedOrdersInPeriod.reduce((sum, o) => sum + o.totalValue, 0);
-        const realizedRevenue = completedOrdersInPeriod.filter(o => o.isPaid).reduce((sum, o) => sum + o.totalValue, 0);
-        const totalExpenses = paymentsInPeriod.reduce((sum, p) => sum + p.amount, 0);
-        const netProfit = realizedRevenue - totalExpenses;
 
         const revenueByClient = completedOrdersInPeriod.reduce((acc, order) => {
             acc[order.clientName] = (acc[order.clientName] || 0) + order.totalValue;
@@ -2288,24 +1991,9 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
             .slice(0, 5)
             .map(([name, value]) => ({ name, value }));
         
-        const expensesByCategory = paymentsInPeriod.reduce((acc, payment) => {
-            acc[payment.category] = (acc[payment.category] || 0) + payment.amount;
-            return acc;
-        }, {});
-        
-        const expensesChartData = Object.entries(expensesByCategory)
-             .map(([name, value]) => ({ name, value }));
-
-        const overdueReceivables = orders.filter(o => 
-            o.status === 'Concluído' && 
-            !o.isPaid && 
-            new Date(o.deliveryDate) < new Date()
-        ).sort((a,b) => new Date(a.deliveryDate) - new Date(b.deliveryDate));
-
         setData({
-            kpis: { grossRevenue, realizedRevenue, totalExpenses, netProfit },
-            charts: { topClients, expensesChartData },
-            overdueReceivables
+            grossRevenue,
+            topClients,
         });
         
         setLoading(false);
@@ -2313,7 +2001,7 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
     
     useEffect(() => {
         handleFilter();
-    }, [orders, payments]);
+    }, [orders]);
     
     useEffect(() => {
         if (period !== 'custom') {
@@ -2330,7 +2018,7 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
         <div className="animate-fade-in space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <h1 className="text-3xl font-bold text-white">Dashboard Financeiro</h1>
-                <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Lançamentos</Button>
+                <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Contas Correntes</Button>
             </div>
             
             <div className="bg-neutral-900 p-4 rounded-2xl shadow-md flex flex-col md:flex-row items-center gap-4">
@@ -2355,72 +2043,23 @@ const FinancialDashboard = ({ orders, payments, setActivePage }) => {
             </div>
 
             {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                 <StatCard icon={<LucideClipboardEdit size={40} className="text-purple-400" />} label="Faturamento Bruto" value={`R$ ${data.kpis.grossRevenue.toFixed(2)}`} color="border-purple-400" />
-                 <StatCard icon={<LucideDollarSign size={40} className="text-green-500" />} label="Receita Realizada" value={`R$ ${data.kpis.realizedRevenue.toFixed(2)}`} color="border-green-500" />
-                 <StatCard icon={<LucideDollarSign size={40} className="text-red-500" />} label="Despesas Totais" value={`R$ ${data.kpis.totalExpenses.toFixed(2)}`} color="border-red-500" />
-                 <StatCard icon={<LucideBarChart3 size={40} className={data.kpis.netProfit >= 0 ? "text-blue-500" : "text-neutral-500"} />} label="Lucro Líquido (Saldo)" value={`R$ ${data.kpis.netProfit.toFixed(2)}`} color={data.kpis.netProfit >= 0 ? "border-blue-500" : "border-neutral-500"} />
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                 <StatCard icon={<LucideClipboardEdit size={40} className="text-purple-400" />} label="Faturamento Bruto (O.S. Concluídas no período)" value={`R$ ${data.grossRevenue.toFixed(2)}`} color="border-purple-400" />
             </div>
+
 
             {/* Gráficos de Pizza */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-neutral-900 p-6 rounded-2xl shadow-md">
-                    <h2 className="text-xl font-bold text-neutral-200 mb-4">Top 5 Clientes (por Faturamento)</h2>
-                     <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                            <Pie data={data.charts.topClients} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={{ fill: '#F5F5F5' }}>
-                                {data.charts.topClients.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                            </Pie>
-                            <Tooltip contentStyle={{ backgroundColor: '#121212', border: '1px solid #4A5568' }} formatter={(value) => `R$ ${value.toFixed(2)}`} />
-                            <Legend wrapperStyle={{ color: '#F5F5F5' }} />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
-                 <div className="bg-neutral-900 p-6 rounded-2xl shadow-md">
-                    <h2 className="text-xl font-bold text-neutral-200 mb-4">Despesas por Categoria</h2>
-                    <ResponsiveContainer width="100%" height={300}>
-                         <PieChart>
-                            <Pie data={data.charts.expensesChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={{ fill: '#F5F5F5' }}>
-                                {data.charts.expensesChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                            </Pie>
-                            <Tooltip contentStyle={{ backgroundColor: '#121212', border: '1px solid #4A5568' }} formatter={(value) => `R$ ${value.toFixed(2)}`} />
-                            <Legend wrapperStyle={{ color: '#F5F5F5' }} />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-
-            {/* Tabela de Contas a Receber Vencidas */}
             <div className="bg-neutral-900 p-6 rounded-2xl shadow-md">
-                <h2 className="text-xl font-bold text-neutral-200 mb-4 flex items-center gap-2">
-                    <LucideAlertTriangle className="text-red-500" /> Contas a Receber Vencidas
-                </h2>
-                {data.overdueReceivables.length > 0 ? (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left text-neutral-400">
-                             <thead className="text-xs text-neutral-300 uppercase bg-neutral-800">
-                                <tr>
-                                    <th scope="col" className="px-6 py-3">Nº O.S.</th>
-                                    <th scope="col" className="px-6 py-3">Cliente</th>
-                                    <th scope="col" className="px-6 py-3">Data de Entrega</th>
-                                    <th scope="col" className="px-6 py-3 text-right">Valor</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {data.overdueReceivables.map(order => (
-                                    <tr key={order.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-red-900 hover:bg-opacity-20">
-                                        <td className="px-6 py-4 font-medium text-white">#{order.number}</td>
-                                        <td className="px-6 py-4">{order.clientName}</td>
-                                        <td className="px-6 py-4 text-red-400">{new Date(order.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                                        <td className="px-6 py-4 text-right font-bold">R$ {order.totalValue.toFixed(2)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                ) : (
-                    <p className="text-center text-neutral-500 py-4">Nenhuma conta vencida. Bom trabalho!</p>
-                )}
+                <h2 className="text-xl font-bold text-neutral-200 mb-4">Top 5 Clientes (por Faturamento no período)</h2>
+                 <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                        <Pie data={data.topClients} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={{ fill: '#F5F5F5' }}>
+                            {data.topClients.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip contentStyle={{ backgroundColor: '#121212', border: '1px solid #4A5568' }} formatter={(value) => `R$ ${value.toFixed(2)}`} />
+                        <Legend wrapperStyle={{ color: '#F5F5F5' }} />
+                    </PieChart>
+                </ResponsiveContainer>
             </div>
         </div>
     );
@@ -2602,8 +2241,6 @@ const AppLayout = ({ user, userProfile }) => {
     const [inventory, setInventory] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [companyProfile, setCompanyProfile] = useState(null);
-    const [payments, setPayments] = useState([]);
-
 
     useEffect(() => {
         if (!user) return;
@@ -2615,7 +2252,6 @@ const AppLayout = ({ user, userProfile }) => {
             priceTables: setPriceTables,
             inventory: setInventory,
             suppliers: setSuppliers,
-            payments: setPayments,
         };
         const unsubscribers = Object.entries(collections).map(([name, setter]) => {
             const q = query(collection(db, `artifacts/${appId}/users/${user.uid}/${name}`));
@@ -2646,8 +2282,6 @@ const AppLayout = ({ user, userProfile }) => {
     };
 
     const renderPage = () => {
-        const navPage = activePage.startsWith('financials') ? 'financials' : activePage;
-
         switch (activePage) {
             case 'dashboard':
                 return <Dashboard setActivePage={setActivePage} serviceOrders={serviceOrders} inventory={inventory} />;
@@ -2855,9 +2489,9 @@ const AppLayout = ({ user, userProfile }) => {
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
             
             case 'financials':
-                return <FinancialDashboard orders={serviceOrders} payments={payments} setActivePage={setActivePage} />;
+                return <FinancialDashboard orders={serviceOrders} setActivePage={setActivePage} />;
             case 'financials-ledger':
-                 return <Financials userId={user.uid} orders={serviceOrders} companyProfile={companyProfile} setActivePage={setActivePage} />;
+                 return <ClientAccounts userId={user.uid} clients={clients} orders={serviceOrders} />;
             
             case 'reports':
                 return <Reports orders={serviceOrders} employees={employees} clients={clients} />;
@@ -2871,7 +2505,7 @@ const AppLayout = ({ user, userProfile }) => {
     };
 
     const NavItem = ({ icon, label, page, activePage, setActivePage }) => {
-        const isFinancialPage = page === 'financials' && activePage.startsWith('financials');
+        const isFinancialPage = page === 'financials' && (activePage === 'financials' || activePage === 'financials-ledger');
         const isActive = activePage === page || isFinancialPage;
 
         return (
@@ -2971,9 +2605,6 @@ export default function App() {
         return <Spinner />;
     }
     
-    // * AQUI ESTÁ A CORREÇÃO PRINCIPAL:
-    //   - Este estilo garante que o fundo de toda a página (body) seja preto
-    //   - e que os elementos principais (html, body, #root) ocupem 100% da altura.
     const GlobalStyles = () => (
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
@@ -2986,7 +2617,7 @@ export default function App() {
 
         body { 
           font-family: 'Copperplate Gothic', 'Cinzel', serif !important; 
-          background-color: #000; /* Fundo preto para a página inteira */
+          background-color: #000;
         }
       `}</style>
     );
