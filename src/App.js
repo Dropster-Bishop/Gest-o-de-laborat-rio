@@ -2892,11 +2892,7 @@ const AppLayout = ({ user, userProfile }) => {
     };
 
     return (
-        <div className="flex h-screen bg-black text-white">
-            {/* * AQUI ESTÁ A CORREÇÃO:
-              * 1. Adicionado `justify-between` ao <aside> para distribuir o espaço.
-              * 2. Removido `mt-auto` do <div> do botão de logout.
-            */}
+        <div className="flex h-full text-white">
             <aside className="w-64 bg-neutral-900 shadow-lg flex-shrink-0 flex flex-col justify-between">
                 <div>
                     <div className="flex items-center justify-center h-20 border-b border-neutral-800">
@@ -2929,12 +2925,13 @@ const AppLayout = ({ user, userProfile }) => {
                     </button>
                 </div>
             </aside>
-            <main className="flex-1 p-6 md:p-10 overflow-y-auto">
+            <main className="flex-1 p-6 md:p-10 overflow-y-auto bg-black">
                 {renderPage()}
             </main>
         </div>
     );
 };
+
 
 export default function App() {
     const [user, setUser] = useState(null);
@@ -2974,13 +2971,22 @@ export default function App() {
         return <Spinner />;
     }
     
-    // Otimização: Aplicar a fonte globalmente aqui para evitar repetição
+    // * AQUI ESTÁ A CORREÇÃO PRINCIPAL:
+    //   - Este estilo garante que o fundo de toda a página (body) seja preto
+    //   - e que os elementos principais (html, body, #root) ocupem 100% da altura.
     const GlobalStyles = () => (
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
         
+        html, body, #root {
+          height: 100%;
+          margin: 0;
+          padding: 0;
+        }
+
         body { 
           font-family: 'Copperplate Gothic', 'Cinzel', serif !important; 
+          background-color: #000; /* Fundo preto para a página inteira */
         }
       `}</style>
     );
