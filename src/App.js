@@ -2081,6 +2081,7 @@ const LoginScreen = () => {
         setError('');
         setMessage('');
 
+        // LÓGICA DE LOGIN (PERMANECE IGUAL)
         if (isLogin) {
             try {
                 const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -2095,39 +2096,43 @@ const LoginScreen = () => {
             } catch (err) {
                 setError("E-mail ou senha incorretos.");
             }
+        // LÓGICA DE CADASTRO (MODIFICADA PARA DEPURAÇÃO)
         } else {
+            console.log("--- INICIANDO PROCESSO DE CADASTRO ---");
             try {
+                console.log("1. Tentando criar usuário no Firebase Auth...");
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
-                await setDoc(doc(db, "users", user.uid), {
+                console.log("2. SUCESSO! Usuário criado no Auth com UID:", user.uid);
+
+                console.log("3. Tentando escrever documento no Firestore...");
+                const userDocRef = doc(db, "users", user.uid);
+                await setDoc(userDocRef, {
                     email: user.email,
                     uid: user.uid,
                     status: 'pending',
                     role: 'user',
                     createdAt: serverTimestamp()
                 });
-                await signOut(auth);
+                console.log("4. SUCESSO! Documento escrito no Firestore.");
+                
+                // A linha abaixo foi comentada PROPOSITALMENTE para o teste
+                // await signOut(auth);
+                // console.log("5. Usuário deslogado para aguardar aprovação.");
+
                 setMessage('Registo concluído! A sua conta está agora pendente de aprovação pelo administrador.');
+
             } catch (err) {
-                switch (err.code) {
-                    case 'auth/invalid-email':
-                        setError('Formato de e-mail inválido.');
-                        break;
-                    case 'auth/email-already-in-use':
-                        setError('Este e-mail já está a ser utilizado.');
-                        break;
-                    case 'auth/weak-password':
-                        setError('A senha deve ter pelo menos 6 caracteres.');
-                        break;
-                    default:
-                        setError('Ocorreu um erro. Tente novamente.');
-                }
+                // Se qualquer um dos passos acima falhar, o erro será capturado aqui
+                console.error("### ERRO NO PROCESSO DE CADASTRO ###", err);
+                setError(`Ocorreu um erro: ${err.message}`);
             }
         }
         setLoading(false);
     };
 
     const handlePasswordReset = async (e) => {
+        // ... (código inalterado)
         e.preventDefault();
         setLoading(true);
         setError('');
@@ -2147,6 +2152,7 @@ const LoginScreen = () => {
     };
 
     const toggleView = (view) => {
+        // ... (código inalterado)
         setError('');
         setMessage('');
         if (view === 'login') {
