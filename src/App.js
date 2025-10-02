@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 // --- Dependências ---
@@ -24,9 +24,9 @@ import {
     setDoc,
     getDoc,
     writeBatch,
-    where, // Adicionado para a nova lógica
-    getDocs, // Adicionado para a nova lógica
-    orderBy // Adicionado para a nova lógica
+    where,
+    getDocs,
+    orderBy
 } from 'firebase/firestore';
 import {
     LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered,
@@ -781,9 +781,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
     const handlePrint = () => generatePdf('print');
     const handleSaveAsPdf = () => generatePdf('save');
 
-    // ##################################################################
-    // ## INÍCIO DA ALTERAÇÃO: Lógica para criar débito na conta corrente
-    // ##################################################################
     const handleStatusChange = async (orderId, newStatus) => {
         if (!userId) return;
         const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
@@ -798,7 +795,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                 if (order && order.totalValue > 0) {
                     const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
                     
-                    // Verifica se já não existe um débito para esta O.S. para evitar duplicidade
                     const q = query(transactionRef, where("orderId", "==", orderId), where("type", "==", "debit"));
                     const existingDebitSnapshot = await getDocs(q);
     
@@ -822,10 +818,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             console.error("Error updating status: ", error);
         }
     };
-    // ##################################################################
-    // ## FIM DA ALTERAÇÃO
-    // ##################################################################
-
 
     const getStatusClasses = (status) => {
         switch (status) {
@@ -1680,16 +1672,18 @@ const UserManagement = ({ userId }) => {
 };
 
 // ##################################################################
-// ## NOVO COMPONENTE: Conta Corrente do Cliente (substitui Financials)
+// ## INÍCIO DAS ALTERAÇÕES NO COMPONENTE DE CONTAS CORRENTES
 // ##################################################################
-const ClientAccounts = ({ userId, clients, orders }) => {
+const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
     const [accounts, setAccounts] = useState([]);
     const [selectedClient, setSelectedClient] = useState(null);
     const [transactions, setTransactions] = useState([]);
     const [isCreditModalOpen, setCreditModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('extrato');
+    const printRef = useRef();
 
-    // Carrega as transações e calcula os saldos
+    // Carrega as transações e calcula os saldos de todos os clientes
     useEffect(() => {
         if (!userId || clients.length === 0) {
             setLoading(false);
@@ -1722,19 +1716,33 @@ const ClientAccounts = ({ userId, clients, orders }) => {
         return () => unsubscribe();
     }, [userId, clients]);
 
-    // Busca o extrato do cliente selecionado
-    const handleSelectClient = async (client) => {
-        if (!userId) return;
-        
-        // Atualiza o estado imediatamente para o feedback visual
-        setSelectedClient(client);
+    // Busca o extrato do cliente selecionado em tempo real
+    useEffect(() => {
+        if (!selectedClient || !userId) {
+            setTransactions([]);
+            return;
+        }
 
         const transactionsRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
-        const q = query(transactionsRef, where("clientId", "==", client.id), orderBy("date", "desc"), orderBy("createdAt", "desc"));
+        const q = query(transactionsRef, where("clientId", "==", selectedClient.id), orderBy("date", "desc"), orderBy("createdAt", "desc"));
         
-        const snapshot = await getDocs(q);
-        const clientTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setTransactions(clientTransactions);
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const clientTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setTransactions(clientTransactions);
+        });
+
+        return () => unsubscribe();
+    }, [selectedClient, userId]);
+    
+    // Filtra as O.S. apenas para o cliente selecionado
+    const clientOrders = useMemo(() => {
+        if (!selectedClient) return [];
+        return orders.filter(o => o.clientId === selectedClient.id).sort((a, b) => b.number - a.number);
+    }, [selectedClient, orders]);
+    
+    const handleSelectClient = (client) => {
+        setSelectedClient(client);
+        setActiveTab('extrato'); // Reseta para a aba extrato ao trocar de cliente
     };
 
     // Salva um novo crédito (pagamento)
@@ -1753,13 +1761,70 @@ const ClientAccounts = ({ userId, clients, orders }) => {
                 orderId: null,
                 createdAt: serverTimestamp()
             });
-            // Re-fetch transactions for the currently selected client to show the update
-            handleSelectClient(selectedClient); 
             setCreditModalOpen(false);
         } catch (error) {
             console.error("Erro ao adicionar crédito:", error);
             alert("Não foi possível registrar o pagamento.");
         }
+    };
+
+    const handleCancelOrder = async (order) => {
+        if (!userId) return;
+        if (window.confirm(`Tem certeza que deseja cancelar a O.S. #${order.number}? Esta ação também removerá o débito correspondente da conta do cliente.`)) {
+            try {
+                const batch = writeBatch(db);
+
+                const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, order.id);
+                batch.update(orderRef, { status: 'Cancelado' });
+
+                const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
+                const q = query(transactionRef, where("orderId", "==", order.id), where("type", "==", "debit"));
+                const debitSnapshot = await getDocs(q);
+                
+                if (!debitSnapshot.empty) {
+                    const debitDoc = debitSnapshot.docs[0];
+                    batch.delete(debitDoc.ref);
+                }
+                
+                await batch.commit();
+                alert(`O.S. #${order.number} cancelada e débito estornado.`);
+
+            } catch (error) {
+                console.error("Erro ao cancelar O.S.: ", error);
+                alert("Ocorreu um erro ao tentar cancelar a O.S.");
+            }
+        }
+    };
+
+    const generateClientPdf = (action = 'print') => {
+        const input = printRef.current;
+        if (!input || !window.html2canvas || !window.jspdf) {
+            alert('Não foi possível gerar o PDF. Bibliotecas necessárias não encontradas.');
+            return;
+        }
+
+        window.html2canvas(input, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const margin = 15;
+            const usableWidth = pdfWidth - (margin * 2);
+            const aspectRatio = canvas.height / canvas.width;
+            const scaledHeight = usableWidth * aspectRatio;
+
+            pdf.addImage(imgData, 'PNG', margin, margin, usableWidth, scaledHeight);
+            
+            if (action === 'print') {
+                pdf.autoPrint();
+                window.open(pdf.output('bloburl'), '_blank');
+            } else {
+                pdf.save(`Extrato_${selectedClient.name.replace(/ /g, '_')}.pdf`);
+            }
+        }).catch(err => {
+            console.error("Error generating PDF:", err);
+            alert("Ocorreu um erro ao gerar o PDF.");
+        });
     };
     
     if (loading) return <Spinner />;
@@ -1768,7 +1833,12 @@ const ClientAccounts = ({ userId, clients, orders }) => {
         <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Coluna da Esquerda: Lista de Clientes e Saldos */}
             <div className="lg:col-span-1 bg-neutral-900 p-6 rounded-2xl shadow-md self-start">
-                <h2 className="text-xl font-bold text-white mb-4">Contas de Clientes</h2>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-white">Contas de Clientes</h2>
+                    <Button onClick={() => setActivePage('financials')} variant="secondary" className="py-1 px-2 text-xs">
+                        Voltar
+                    </Button>
+                </div>
                 <div className="space-y-2 max-h-[75vh] overflow-y-auto">
                     {accounts.map(acc => (
                         <div key={acc.id} onClick={() => handleSelectClient(acc)}
@@ -1789,46 +1859,115 @@ const ClientAccounts = ({ userId, clients, orders }) => {
             <div className="lg:col-span-2 space-y-6">
                 {selectedClient ? (
                     <div className="bg-neutral-900 p-6 rounded-2xl shadow-md">
-                        <header className="flex justify-between items-center mb-4 pb-4 border-b border-neutral-700">
+                        <header className="flex flex-col md:flex-row justify-between items-start mb-4 pb-4 border-b border-neutral-700 gap-4">
                             <div>
                                 <h2 className="text-2xl font-bold text-yellow-500">{selectedClient.name}</h2>
-                                <p className="text-neutral-300">Extrato de Conta Corrente</p>
+                                <p className="text-neutral-300">Detalhes da Conta</p>
                             </div>
-                            <Button onClick={() => setCreditModalOpen(true)}>
-                                <LucidePlusCircle size={20} />
-                                Lançar Pagamento (Crédito)
-                            </Button>
+                            <div className="flex gap-2">
+                                 <Button onClick={() => generateClientPdf('save')} variant="secondary"><LucideFileDown size={18} /> Salvar PDF</Button>
+                                 <Button onClick={() => generateClientPdf('print')}><LucidePrinter size={18} /> Imprimir</Button>
+                            </div>
                         </header>
                         
-                        <div className="max-h-[70vh] overflow-y-auto">
-                            <table className="w-full text-sm text-left text-neutral-400">
-                                <thead className="text-xs text-neutral-300 uppercase bg-neutral-800 sticky top-0">
-                                    <tr>
-                                        <th scope="col" className="px-6 py-3">Data</th>
-                                        <th scope="col" className="px-6 py-3">Descrição</th>
-                                        <th scope="col" className="px-6 py-3 text-right">Débito</th>
-                                        <th scope="col" className="px-6 py-3 text-right">Crédito</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {transactions.map(t => (
-                                        <tr key={t.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-neutral-800">
-                                            <td className="px-6 py-4">{new Date(t.date).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                                            <td className="px-6 py-4">{t.description}</td>
-                                            <td className="px-6 py-4 text-right font-mono text-red-400">
-                                                {t.type === 'debit' ? `R$ ${t.amount.toFixed(2)}` : ''}
-                                            </td>
-                                            <td className="px-6 py-4 text-right font-mono text-green-400">
-                                                {t.type === 'credit' ? `R$ ${t.amount.toFixed(2)}` : ''}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {transactions.length === 0 && (
-                                        <tr><td colSpan="4" className="text-center p-8 text-neutral-500">Nenhuma transação encontrada.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
+                        <div className="flex border-b border-neutral-700 mb-4">
+                            <button onClick={() => setActiveTab('extrato')} className={`py-2 px-4 text-sm font-medium ${activeTab === 'extrato' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-neutral-400 hover:text-white'}`}>
+                                Extrato da Conta
+                            </button>
+                            <button onClick={() => setActiveTab('os')} className={`py-2 px-4 text-sm font-medium ${activeTab === 'os' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-neutral-400 hover:text-white'}`}>
+                                Ordens de Serviço ({clientOrders.length})
+                            </button>
                         </div>
+
+                        {activeTab === 'extrato' && (
+                           <div>
+                                <div className="flex justify-end mb-4">
+                                     <Button onClick={() => setCreditModalOpen(true)}>
+                                         <LucidePlusCircle size={20} />
+                                         Lançar Pagamento (Crédito)
+                                     </Button>
+                                </div>
+                                <div className="max-h-[60vh] overflow-y-auto">
+                                    <div ref={printRef} className="p-4 bg-white text-neutral-800 rounded">
+                                        <h3 className="text-xl font-bold mb-1">{selectedClient.name}</h3>
+                                        <p className="text-sm text-neutral-600 mb-4">Extrato de Conta Corrente - Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
+                                        <table className="w-full text-sm text-left text-neutral-600">
+                                            <thead className="text-xs text-neutral-700 uppercase bg-neutral-100">
+                                                <tr>
+                                                    <th scope="col" className="px-6 py-3">Data</th>
+                                                    <th scope="col" className="px-6 py-3">Descrição</th>
+                                                    <th scope="col" className="px-6 py-3 text-right">Débito</th>
+                                                    <th scope="col" className="px-6 py-3 text-right">Crédito</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="text-neutral-800">
+                                                {transactions.map(t => (
+                                                    <tr key={t.id} className="border-b">
+                                                        <td className="px-6 py-4">{new Date(t.date).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                                        <td className="px-6 py-4">{t.description}</td>
+                                                        <td className="px-6 py-4 text-right font-mono text-red-600">
+                                                            {t.type === 'debit' ? `R$ ${t.amount.toFixed(2)}` : ''}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right font-mono text-green-600">
+                                                            {t.type === 'credit' ? `R$ ${t.amount.toFixed(2)}` : ''}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {transactions.length === 0 && (
+                                                    <tr><td colSpan="4" className="text-center p-8 text-neutral-500">Nenhuma transação encontrada.</td></tr>
+                                                )}
+                                            </tbody>
+                                            <tfoot className="font-bold bg-neutral-100">
+                                                <tr>
+                                                    <td colSpan="3" className="px-6 py-3 text-right uppercase">Saldo Final:</td>
+                                                    <td className="px-6 py-3 text-right text-lg">
+                                                        R$ {(accounts.find(a => a.id === selectedClient.id)?.balance || 0).toFixed(2)}
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {activeTab === 'os' && (
+                             <div className="max-h-[60vh] overflow-y-auto">
+                                <table className="w-full text-sm text-left text-neutral-400">
+                                    <thead className="text-xs text-neutral-300 uppercase bg-neutral-800 sticky top-0">
+                                        <tr>
+                                            <th className="px-4 py-3">Nº O.S.</th>
+                                            <th className="px-4 py-3">Paciente</th>
+                                            <th className="px-4 py-3">Data Conclusão</th>
+                                            <th className="px-4 py-3">Status</th>
+                                            <th className="px-4 py-3 text-right">Valor</th>
+                                            <th className="px-4 py-3 text-center">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {clientOrders.map(order => (
+                                            <tr key={order.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-neutral-800">
+                                                <td className="px-4 py-3 font-medium">#{order.number}</td>
+                                                <td className="px-4 py-3">{order.patientName}</td>
+                                                <td className="px-4 py-3">{order.completionDate ? new Date(order.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'N/A'}</td>
+                                                <td className="px-4 py-3">{order.status}</td>
+                                                <td className="px-4 py-3 text-right">R$ {order.totalValue.toFixed(2)}</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    {order.status === 'Concluído' && (
+                                                        <Button onClick={() => handleCancelOrder(order)} variant="danger" className="py-1 px-2 text-xs">
+                                                            Cancelar
+                                                        </Button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                         {clientOrders.length === 0 && (
+                                            <tr><td colSpan="6" className="text-center p-8 text-neutral-500">Nenhuma O.S. encontrada para este cliente.</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <div className="bg-neutral-900 p-12 rounded-2xl shadow-md text-center">
@@ -1847,6 +1986,9 @@ const ClientAccounts = ({ userId, clients, orders }) => {
         </div>
     );
 };
+// ##################################################################
+// ## FIM DAS ALTERAÇÕES
+// ##################################################################
 
 // Componente auxiliar para o formulário de crédito
 const CreditForm = ({ onSubmit, onCancel }) => {
@@ -1871,11 +2013,6 @@ const CreditForm = ({ onSubmit, onCancel }) => {
         </form>
     );
 };
-
-// ##################################################################
-// ## FIM DO NOVO COMPONENTE
-// ##################################################################
-
 
 const Settings = ({ userId, initialProfile }) => {
     const [profile, setProfile] = useState(initialProfile || {});
@@ -1934,9 +2071,6 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
     const [customEndDate, setCustomEndDate] = useState('');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-
-    // Este componente pode precisar de ajustes futuros para refletir o novo sistema
-    // Por enquanto, vamos manter a lógica de faturamento bruto e por cliente
 
     const COLORS = ['#D4AF37', '#B8860B', '#8B6914', '#FFD700', '#F0E68C'];
 
@@ -2081,7 +2215,6 @@ const LoginScreen = () => {
         setError('');
         setMessage('');
 
-        // LÓGICA DE LOGIN (PERMANECE IGUAL)
         if (isLogin) {
             try {
                 const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -2096,16 +2229,11 @@ const LoginScreen = () => {
             } catch (err) {
                 setError("E-mail ou senha incorretos.");
             }
-        // LÓGICA DE CADASTRO (MODIFICADA PARA DEPURAÇÃO)
         } else {
-            console.log("--- INICIANDO PROCESSO DE CADASTRO ---");
             try {
-                console.log("1. Tentando criar usuário no Firebase Auth...");
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
-                console.log("2. SUCESSO! Usuário criado no Auth com UID:", user.uid);
 
-                console.log("3. Tentando escrever documento no Firestore...");
                 const userDocRef = doc(db, "users", user.uid);
                 await setDoc(userDocRef, {
                     email: user.email,
@@ -2114,17 +2242,11 @@ const LoginScreen = () => {
                     role: 'user',
                     createdAt: serverTimestamp()
                 });
-                console.log("4. SUCESSO! Documento escrito no Firestore.");
                 
-                // A linha abaixo foi comentada PROPOSITALMENTE para o teste
-                // await signOut(auth);
-                // console.log("5. Usuário deslogado para aguardar aprovação.");
-
+                await signOut(auth);
                 setMessage('Registo concluído! A sua conta está agora pendente de aprovação pelo administrador.');
 
             } catch (err) {
-                // Se qualquer um dos passos acima falhar, o erro será capturado aqui
-                console.error("### ERRO NO PROCESSO DE CADASTRO ###", err);
                 setError(`Ocorreu um erro: ${err.message}`);
             }
         }
@@ -2132,7 +2254,6 @@ const LoginScreen = () => {
     };
 
     const handlePasswordReset = async (e) => {
-        // ... (código inalterado)
         e.preventDefault();
         setLoading(true);
         setError('');
@@ -2152,7 +2273,6 @@ const LoginScreen = () => {
     };
 
     const toggleView = (view) => {
-        // ... (código inalterado)
         setError('');
         setMessage('');
         if (view === 'login') {
@@ -2497,7 +2617,7 @@ const AppLayout = ({ user, userProfile }) => {
             case 'financials':
                 return <FinancialDashboard orders={serviceOrders} setActivePage={setActivePage} />;
             case 'financials-ledger':
-                 return <ClientAccounts userId={user.uid} clients={clients} orders={serviceOrders} />;
+                 return <ClientAccounts userId={user.uid} clients={clients} orders={serviceOrders} setActivePage={setActivePage} />;
             
             case 'reports':
                 return <Reports orders={serviceOrders} employees={employees} clients={clients} />;
