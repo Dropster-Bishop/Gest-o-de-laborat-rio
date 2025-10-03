@@ -781,11 +781,15 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
     const handlePrint = () => generatePdf('print');
     const handleSaveAsPdf = () => generatePdf('save');
 
+    // ##################################################################
+    // ## INÍCIO DA ALTERAÇÃO 1: LÓGICA DE ESTORNO DO SALDO
+    // ##################################################################
     const handleStatusChange = async (orderId, newStatus) => {
         if (!userId) return;
         const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
         try {
             const updateData = { status: newStatus };
+            const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
     
             if (newStatus === 'Concluído') {
                 const completionDate = new Date().toISOString().split('T')[0];
@@ -793,8 +797,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                 
                 const order = orders.find(o => o.id === orderId);
                 if (order && order.totalValue > 0) {
-                    const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
-                    
                     const q = query(transactionRef, where("orderId", "==", orderId), where("type", "==", "debit"));
                     const existingDebitSnapshot = await getDocs(q);
     
@@ -811,13 +813,28 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                         });
                     }
                 }
+            } else {
+                // Se o status NÃO for 'Concluído', verifica se existe um débito e o remove.
+                updateData.completionDate = null; // Limpa a data de conclusão
+                const q = query(transactionRef, where("orderId", "==", orderId), where("type", "==", "debit"));
+                const existingDebitSnapshot = await getDocs(q);
+
+                if (!existingDebitSnapshot.empty) {
+                    const debitDoc = existingDebitSnapshot.docs[0];
+                    await deleteDoc(debitDoc.ref); // Remove o débito da conta do cliente
+                }
             }
     
             await updateDoc(orderRef, updateData);
         } catch (error) {
             console.error("Error updating status: ", error);
+            alert("Ocorreu um erro ao atualizar o status da O.S.");
         }
     };
+    // ##################################################################
+    // ## FIM DA ALTERAÇÃO 1
+    // ##################################################################
+
 
     const getStatusClasses = (status) => {
         switch (status) {
@@ -1768,6 +1785,25 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
         }
     };
 
+    // ##################################################################
+    // ## INÍCIO DA ALTERAÇÃO 2: FUNÇÃO PARA EXCLUIR CRÉDITO
+    // ##################################################################
+    const handleDeleteTransaction = async (transactionId) => {
+        if (!userId) return;
+        if (window.confirm('Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita.')) {
+            try {
+                const transactionDocRef = doc(db, `artifacts/${appId}/users/${userId}/clientTransactions`, transactionId);
+                await deleteDoc(transactionDocRef);
+            } catch (error) {
+                console.error("Erro ao excluir transação:", error);
+                alert("Não foi possível excluir o lançamento.");
+            }
+        }
+    };
+    // ##################################################################
+    // ## FIM DA ALTERAÇÃO 2
+    // ##################################################################
+
     const handleCancelOrder = async (order) => {
         if (!userId) return;
         if (window.confirm(`Tem certeza que deseja cancelar a O.S. #${order.number}? Esta ação também removerá o débito correspondente da conta do cliente.`)) {
@@ -1898,6 +1934,8 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                                     <th scope="col" className="px-6 py-3">Descrição</th>
                                                     <th scope="col" className="px-6 py-3 text-right">Débito</th>
                                                     <th scope="col" className="px-6 py-3 text-right">Crédito</th>
+                                                    {/* ## ALTERAÇÃO: Adicionando coluna de ação ## */}
+                                                    <th scope="col" className="px-6 py-3 text-center">Ação</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="text-neutral-800">
@@ -1911,15 +1949,26 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                                         <td className="px-6 py-4 text-right font-mono text-green-600">
                                                             {t.type === 'credit' ? `R$ ${t.amount.toFixed(2)}` : ''}
                                                         </td>
+                                                        {/* ## ALTERAÇÃO: Adicionando botão de excluir ## */}
+                                                        <td className="px-6 py-4 text-center">
+                                                            {t.type === 'credit' && (
+                                                                <button 
+                                                                    onClick={() => handleDeleteTransaction(t.id)} 
+                                                                    className="p-1 text-red-600 hover:text-red-800"
+                                                                    title="Excluir Lançamento de Crédito">
+                                                                    <LucideTrash2 size={16} />
+                                                                </button>
+                                                            )}
+                                                        </td>
                                                     </tr>
                                                 ))}
                                                 {transactions.length === 0 && (
-                                                    <tr><td colSpan="4" className="text-center p-8 text-neutral-500">Nenhuma transação encontrada.</td></tr>
+                                                    <tr><td colSpan="5" className="text-center p-8 text-neutral-500">Nenhuma transação encontrada.</td></tr>
                                                 )}
                                             </tbody>
                                             <tfoot className="font-bold bg-neutral-100">
                                                 <tr>
-                                                    <td colSpan="3" className="px-6 py-3 text-right uppercase">Saldo Final:</td>
+                                                    <td colSpan="4" className="px-6 py-3 text-right uppercase">Saldo Final:</td>
                                                     <td className="px-6 py-3 text-right text-lg">
                                                         R$ {(accounts.find(a => a.id === selectedClient.id)?.balance || 0).toFixed(2)}
                                                     </td>
