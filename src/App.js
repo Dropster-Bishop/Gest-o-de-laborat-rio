@@ -3,8 +3,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 
 // --- Dependências ---
 import { initializeApp } from 'firebase/app';
-import jsPDF from 'jspdf'; 
-import html2canvas from 'html2canvas'; 
+import jsPDF from 'jspdf'; // Importação corrigida
+import html2canvas from 'html2canvas'; // Importação corrigida
 import {
     getAuth,
     onAuthStateChanged,
@@ -717,7 +717,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         if (!userId) return;
         if (window.confirm('Tem certeza que deseja excluir esta ordem de serviço?')) {
             try {
-                // ATENÇÃO: A lógica para excluir o débito correspondente deveria ser adicionada aqui.
                 const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, id);
                 await deleteDoc(docRef);
             } catch (error) {
@@ -737,7 +736,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         elementsToHide.forEach(el => el.style.visibility = 'hidden');
 
         html2canvas(input, {
-            scale: 2, // Aumenta a resolução da imagem
+            scale: 2,
             useCORS: true,
             backgroundColor: '#ffffff'
         }).then(canvas => {
@@ -756,13 +755,11 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             const scaledImgHeight = usableWidth * aspectRatio;
 
             let heightLeft = scaledImgHeight;
-            let position = 0; // Posição de "corte" na imagem original
+            let position = 0;
 
-            // Adiciona a primeira página
             pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledImgHeight);
             heightLeft -= usableHeight;
 
-            // Adiciona páginas extras se o conteúdo for maior
             while (heightLeft > 0) {
                 position -= usableHeight;
                 pdf.addPage();
@@ -786,9 +783,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
     const handlePrint = () => generatePdf('print');
     const handleSaveAsPdf = () => generatePdf('save');
 
-    // ##################################################################
-    // ## INÍCIO DA ALTERAÇÃO 1: LÓGICA DE ESTORNO DO SALDO
-    // ##################################################################
     const handleStatusChange = async (orderId, newStatus) => {
         if (!userId) return;
         const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
@@ -819,14 +813,13 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                     }
                 }
             } else {
-                // Se o status NÃO for 'Concluído', verifica se existe um débito e o remove.
-                updateData.completionDate = null; // Limpa a data de conclusão
+                updateData.completionDate = null;
                 const q = query(transactionRef, where("orderId", "==", orderId), where("type", "==", "debit"));
                 const existingDebitSnapshot = await getDocs(q);
 
                 if (!existingDebitSnapshot.empty) {
                     const debitDoc = existingDebitSnapshot.docs[0];
-                    await deleteDoc(debitDoc.ref); // Remove o débito da conta do cliente
+                    await deleteDoc(debitDoc.ref);
                 }
             }
     
@@ -836,10 +829,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             alert("Ocorreu um erro ao atualizar o status da O.S.");
         }
     };
-    // ##################################################################
-    // ## FIM DA ALTERAÇÃO 1
-    // ##################################################################
-
 
     const getStatusClasses = (status) => {
         switch (status) {
@@ -1118,31 +1107,39 @@ const Reports = ({ orders, employees, clients }) => {
 
     const generateReportPdf = (action = 'print') => {
         const input = reportPrintRef.current;
-        if (!input || !window.html2canvas || !window.jspdf) {
-            alert('Não foi possível gerar o PDF. Bibliotecas necessárias não encontradas.');
+        if (!input) {
+            alert('Não foi possível encontrar o conteúdo para gerar o PDF.');
             return;
         }
 
-        window.html2canvas(input, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(canvas => {
+        html2canvas(input, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff'
+        }).then(canvas => {
             const imgData = canvas.toDataURL('image/png');
-            const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
+
             const MARGIN = 15;
             const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
             const usableWidth = pdfWidth - (MARGIN * 2);
-            const canvasWidth = canvas.width;
-            const canvasHeight = canvas.height;
-            const aspectRatio = canvasHeight / canvasWidth;
-            const scaledHeight = usableWidth * aspectRatio;
-            let heightLeft = scaledHeight;
+            const usableHeight = pdfHeight - (MARGIN * 2);
+
+            const aspectRatio = canvas.height / canvas.width;
+            const scaledImgHeight = usableWidth * aspectRatio;
+
+            let heightLeft = scaledImgHeight;
             let position = 0;
-            pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledHeight);
-            heightLeft -= (pdf.internal.pageSize.getHeight() - MARGIN * 2);
+
+            pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledImgHeight);
+            heightLeft -= usableHeight;
+
             while (heightLeft > 0) {
-                position -= (pdf.internal.pageSize.getHeight() - MARGIN * 2);
+                position -= usableHeight;
                 pdf.addPage();
-                pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledHeight);
-                heightLeft -= (pdf.internal.pageSize.getHeight() - MARGIN * 2);
+                pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledImgHeight);
+                heightLeft -= usableHeight;
             }
             if (action === 'print') {
                 pdf.autoPrint();
@@ -1238,7 +1235,6 @@ const Reports = ({ orders, employees, clients }) => {
                         </div>
                     )}
                 </div>
-                {/* O ref abaixo é para a geração de PDF - a div interna terá fundo branco para impressão */}
                 <div className="overflow-hidden">
                     <div ref={reportPrintRef} className="p-4 rounded-lg bg-white text-black">
                         {results.length > 0 && (
@@ -1409,14 +1405,16 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
     
     const generatePdf = (action = 'print') => {
         const input = printRef.current;
-        if (!input || !window.html2canvas || !window.jspdf) {
-            alert('Não foi possível gerar o PDF. Bibliotecas necessárias não encontradas.');
+        if (!input) {
+            alert('Não foi possível encontrar o conteúdo para gerar o PDF.');
             return;
         }
 
-        window.html2canvas(input, { scale: 2, useCORS: true }).then(canvas => {
+        html2canvas(input, {
+            scale: 2,
+            useCORS: true
+        }).then(canvas => {
             const imgData = canvas.toDataURL('image/png');
-            const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
 
             const MARGIN = 15;
@@ -1425,21 +1423,19 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
             const usableWidth = pdfWidth - (MARGIN * 2);
             const usableHeight = pdfHeight - (MARGIN * 2);
 
-            const canvasWidth = canvas.width;
-            const canvasHeight = canvas.height;
-            const aspectRatio = canvasHeight / canvasWidth;
-            const scaledHeight = usableWidth * aspectRatio;
+            const aspectRatio = canvas.height / canvas.width;
+            const scaledImgHeight = usableWidth * aspectRatio;
 
-            let heightLeft = scaledHeight;
+            let heightLeft = scaledImgHeight;
             let position = 0;
 
-            pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledHeight);
+            pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledImgHeight);
             heightLeft -= usableHeight;
 
             while (heightLeft > 0) {
                 position -= usableHeight;
                 pdf.addPage();
-                pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledHeight);
+                pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledImgHeight);
                 heightLeft -= usableHeight;
             }
 
@@ -1693,9 +1689,6 @@ const UserManagement = ({ userId }) => {
     );
 };
 
-// ##################################################################
-// ## INÍCIO DAS ALTERAÇÕES NO COMPONENTE DE CONTAS CORRENTES
-// ##################################################################
 const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
     const [accounts, setAccounts] = useState([]);
     const [selectedClient, setSelectedClient] = useState(null);
@@ -1705,7 +1698,6 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
     const [activeTab, setActiveTab] = useState('extrato');
     const printRef = useRef();
 
-    // Carrega as transações e calcula os saldos de todos os clientes
     useEffect(() => {
         if (!userId || clients.length === 0) {
             setLoading(false);
@@ -1738,7 +1730,6 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
         return () => unsubscribe();
     }, [userId, clients]);
 
-    // Busca o extrato do cliente selecionado em tempo real
     useEffect(() => {
         if (!selectedClient || !userId) {
             setTransactions([]);
@@ -1756,7 +1747,6 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
         return () => unsubscribe();
     }, [selectedClient, userId]);
     
-    // Filtra as O.S. apenas para o cliente selecionado
     const clientOrders = useMemo(() => {
         if (!selectedClient) return [];
         return orders.filter(o => o.clientId === selectedClient.id).sort((a, b) => b.number - a.number);
@@ -1764,10 +1754,9 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
     
     const handleSelectClient = (client) => {
         setSelectedClient(client);
-        setActiveTab('extrato'); // Reseta para a aba extrato ao trocar de cliente
+        setActiveTab('extrato');
     };
 
-    // Salva um novo crédito (pagamento)
     const handleSaveCredit = async ({ amount, date, description }) => {
         if (!userId || !selectedClient || !amount || !date) return;
         
@@ -1790,9 +1779,6 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
         }
     };
 
-    // ##################################################################
-    // ## INÍCIO DA ALTERAÇÃO 2: FUNÇÃO PARA EXCLUIR CRÉDITO
-    // ##################################################################
     const handleDeleteTransaction = async (transactionId) => {
         if (!userId) return;
         if (window.confirm('Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita.')) {
@@ -1805,9 +1791,6 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
             }
         }
     };
-    // ##################################################################
-    // ## FIM DA ALTERAÇÃO 2
-    // ##################################################################
 
     const handleCancelOrder = async (order) => {
         if (!userId) return;
@@ -1890,7 +1873,6 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
 
     return (
         <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Coluna da Esquerda: Lista de Clientes e Saldos */}
             <div className="lg:col-span-1 bg-neutral-900 p-6 rounded-2xl shadow-md self-start">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-white">Contas de Clientes</h2>
@@ -1914,7 +1896,6 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                 </div>
             </div>
 
-            {/* Coluna da Direita: Detalhes e Extrato */}
             <div className="lg:col-span-2 space-y-6">
                 {selectedClient ? (
                     <div className="bg-neutral-900 p-6 rounded-2xl shadow-md">
@@ -1957,7 +1938,6 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                                     <th scope="col" className="px-6 py-3">Descrição</th>
                                                     <th scope="col" className="px-6 py-3 text-right">Débito</th>
                                                     <th scope="col" className="px-6 py-3 text-right">Crédito</th>
-                                                    {/* ## ALTERAÇÃO: Adicionando coluna de ação ## */}
                                                     <th scope="col" className="px-6 py-3 text-center">Ação</th>
                                                 </tr>
                                             </thead>
@@ -1972,7 +1952,6 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                                         <td className="px-6 py-4 text-right font-mono text-green-600">
                                                             {t.type === 'credit' ? `R$ ${t.amount.toFixed(2)}` : ''}
                                                         </td>
-                                                        {/* ## ALTERAÇÃO: Adicionando botão de excluir ## */}
                                                         <td className="px-6 py-4 text-center">
                                                             {t.type === 'credit' && (
                                                                 <button 
@@ -2058,11 +2037,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
         </div>
     );
 };
-// ##################################################################
-// ## FIM DAS ALTERAÇÕES
-// ##################################################################
 
-// Componente auxiliar para o formulário de crédito
 const CreditForm = ({ onSubmit, onCancel }) => {
     const [amount, setAmount] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -2227,34 +2202,36 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
                 <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Contas Correntes</Button>
             </div>
             
-            <div className="bg-neutral-900 p-4 rounded-2xl shadow-md flex flex-col md:flex-row items-center gap-4">
-                 <div className="flex-1">
-                     <label htmlFor="period-select" className="block text-sm font-medium text-neutral-300 mb-1">Período Rápido</label>
-                     <select id="period-select" value={period} onChange={e => setPeriod(e.target.value)} className="w-full bg-neutral-800 border border-neutral-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-yellow-500">
-                         <option value="thisMonth">Este Mês</option>
-                         <option value="last30days">Últimos 30 Dias</option>
-                         <option value="thisYear">Este Ano</option>
-                         <option value="custom">Customizado</option>
-                     </select>
-                 </div>
-                 {period === 'custom' && (
-                     <>
-                        <Input label="Data de Início" type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
-                        <Input label="Data de Fim" type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
-                     </>
-                 )}
-                 <div className="self-end">
-                    <Button onClick={handleFilter} className="h-11">Filtrar</Button>
-                 </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                <div className="bg-neutral-900 p-4 rounded-2xl shadow-md flex flex-col md:flex-row flex-wrap items-end gap-4">
+                    <div className="flex-1 min-w-[150px]">
+                        <label htmlFor="period-select" className="block text-sm font-medium text-neutral-300 mb-1">Período Rápido</label>
+                        <select id="period-select" value={period} onChange={e => setPeriod(e.target.value)} className="w-full bg-neutral-800 border border-neutral-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-yellow-500">
+                            <option value="thisMonth">Este Mês</option>
+                            <option value="last30days">Últimos 30 Dias</option>
+                            <option value="thisYear">Este Ano</option>
+                            <option value="custom">Customizado</option>
+                        </select>
+                    </div>
+                    {period === 'custom' && (
+                        <>
+                           <Input className="flex-1 min-w-[150px]" label="Data de Início" type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
+                           <Input className="flex-1 min-w-[150px]" label="Data de Fim" type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
+                        </>
+                    )}
+                    <div className="self-end">
+                       <Button onClick={handleFilter} className="h-11">Filtrar</Button>
+                    </div>
+                </div>
+
+                <StatCard 
+                    icon={<LucideClipboardEdit size={40} className="text-purple-400" />} 
+                    label="Faturamento Bruto (O.S. Concluídas no período)" 
+                    value={`R$ ${data.grossRevenue.toFixed(2)}`} 
+                    color="border-purple-400" 
+                />
             </div>
 
-            {/* KPIs */}
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                 <StatCard icon={<LucideClipboardEdit size={40} className="text-purple-400" />} label="Faturamento Bruto (O.S. Concluídas no período)" value={`R$ ${data.grossRevenue.toFixed(2)}`} color="border-purple-400" />
-            </div>
-
-
-            {/* Gráficos de Pizza */}
             <div className="bg-neutral-900 p-6 rounded-2xl shadow-md">
                 <h2 className="text-xl font-bold text-neutral-200 mb-4">Top 5 Clientes (por Faturamento no período)</h2>
                  <ResponsiveContainer width="100%" height={300}>
