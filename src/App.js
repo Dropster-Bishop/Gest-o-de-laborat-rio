@@ -1936,8 +1936,8 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                                 <tr>
                                                     <th scope="col" className="px-6 py-3">Data</th>
                                                     <th scope="col" className="px-6 py-3">Descrição</th>
-                                                    <th scope="col" className="px-6 py-3 text-right">Débito</th>
-                                                    <th scope="col" className="px-6 py-3 text-right">Crédito</th>
+                                                    <th scope="col" className="px-6 py-3 text-right">A Receber</th>
+                                                    <th scope="col" className="px-6 py-3 text-right">Pago</th>
                                                     <th scope="col" className="px-6 py-3 text-center">Ação</th>
                                                 </tr>
                                             </thead>
