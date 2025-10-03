@@ -2204,34 +2204,41 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
                 <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Contas Correntes</Button>
             </div>
             
-            <div className="bg-neutral-900 p-4 rounded-2xl shadow-md flex flex-col md:flex-row items-center gap-4">
-                 <div className="flex-1">
-                     <label htmlFor="period-select" className="block text-sm font-medium text-neutral-300 mb-1">Período Rápido</label>
-                     <select id="period-select" value={period} onChange={e => setPeriod(e.target.value)} className="w-full bg-neutral-800 border border-neutral-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-yellow-500">
-                         <option value="thisMonth">Este Mês</option>
-                         <option value="last30days">Últimos 30 Dias</option>
-                         <option value="thisYear">Este Ano</option>
-                         <option value="custom">Customizado</option>
-                     </select>
-                 </div>
-                 {period === 'custom' && (
-                     <>
-                        <Input label="Data de Início" type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
-                        <Input label="Data de Fim" type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
-                     </>
-                 )}
-                 <div className="self-end">
-                    <Button onClick={handleFilter} className="h-11">Filtrar</Button>
-                 </div>
+            {/* INÍCIO DA ALTERAÇÃO: Agrupando filtros e KPI principal */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                {/* Coluna 1: Filtros */}
+                <div className="bg-neutral-900 p-4 rounded-2xl shadow-md flex flex-col md:flex-row flex-wrap items-end gap-4">
+                    <div className="flex-1 min-w-[150px]">
+                        <label htmlFor="period-select" className="block text-sm font-medium text-neutral-300 mb-1">Período Rápido</label>
+                        <select id="period-select" value={period} onChange={e => setPeriod(e.target.value)} className="w-full bg-neutral-800 border border-neutral-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-yellow-500">
+                            <option value="thisMonth">Este Mês</option>
+                            <option value="last30days">Últimos 30 Dias</option>
+                            <option value="thisYear">Este Ano</option>
+                            <option value="custom">Customizado</option>
+                        </select>
+                    </div>
+                    {period === 'custom' && (
+                        <>
+                           <Input className="flex-1 min-w-[150px]" label="Data de Início" type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
+                           <Input className="flex-1 min-w-[150px]" label="Data de Fim" type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
+                        </>
+                    )}
+                    <div className="self-end">
+                       <Button onClick={handleFilter} className="h-11">Filtrar</Button>
+                    </div>
+                </div>
+
+                {/* Coluna 2: KPI de Faturamento */}
+                <StatCard 
+                    icon={<LucideClipboardEdit size={40} className="text-purple-400" />} 
+                    label="Faturamento Bruto (O.S. Concluídas no período)" 
+                    value={`R$ ${data.grossRevenue.toFixed(2)}`} 
+                    color="border-purple-400" 
+                />
             </div>
+            {/* FIM DA ALTERAÇÃO */}
 
-            {/* KPIs */}
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                 <StatCard icon={<LucideClipboardEdit size={40} className="text-purple-400" />} label="Faturamento Bruto (O.S. Concluídas no período)" value={`R$ ${data.grossRevenue.toFixed(2)}`} color="border-purple-400" />
-            </div>
-
-
-            {/* Gráficos de Pizza */}
+            {/* Gráfico de Pizza (agora sempre abaixo) */}
             <div className="bg-neutral-900 p-6 rounded-2xl shadow-md">
                 <h2 className="text-xl font-bold text-neutral-200 mb-4">Top 5 Clientes (por Faturamento no período)</h2>
                  <ResponsiveContainer width="100%" height={300}>
