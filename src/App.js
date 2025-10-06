@@ -498,6 +498,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         if (status === 'Concluído' && !completionDateValue) {
             completionDateValue = new Date().toISOString().split('T')[0];
         }
+        // Se o status deixar de ser 'Concluído', limpa a data de conclusão
+        if (status !== 'Concluído') {
+            completionDateValue = null;
+        }
 
         const orderData = {
             clientId: client.id, clientName: client.name, client: client,
@@ -516,18 +520,72 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         };
 
         try {
-            const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/serviceOrders`);
+            const batch = writeBatch(db);
+            const ordersCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/serviceOrders`);
+            const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
+            const transactionDescription = `Referente à O.S. - Paciente: ${orderData.patientName}`;
+
             if (order) {
-                const docRef = doc(db, collectionRef.path, order.id);
-                await updateDoc(docRef, orderData);
+                // --- EDITANDO UMA O.S. EXISTENTE ---
+                const orderRef = doc(db, ordersCollectionRef.path, order.id);
+                batch.update(orderRef, orderData);
+
+                // Procura pelo débito existente desta O.S. para atualizá-lo
+                const q = query(transactionRef, where("orderId", "==", order.id), where("type", "==", "debit"));
+                const existingDebitSnapshot = await getDocs(q);
+
+                if (!existingDebitSnapshot.empty) {
+                    const debitDoc = existingDebitSnapshot.docs[0];
+                    batch.update(debitDoc.ref, { 
+                        amount: finalTotalValue,
+                        description: `Referente à O.S. #${order.number} - Paciente: ${orderData.patientName}`
+                    });
+                } else {
+                     // Caso o débito não exista por algum motivo, cria um novo
+                     const newTransactionRef = doc(transactionRef);
+                     batch.set(newTransactionRef, {
+                        clientId: orderData.clientId,
+                        clientName: orderData.clientName,
+                        type: 'debit',
+                        amount: finalTotalValue,
+                        date: orderData.openDate,
+                        description: `Referente à O.S. #${order.number} - Paciente: ${orderData.patientName}`,
+                        orderId: order.id,
+                        createdAt: serverTimestamp()
+                    });
+                }
             } else {
-                orderData.number = lastOrderNumber + 1;
+                // --- CRIANDO UMA NOVA O.S. ---
+                const newOrderRef = doc(ordersCollectionRef);
+                const newOrderNumber = lastOrderNumber + 1;
+                
+                orderData.number = newOrderNumber;
                 orderData.createdAt = serverTimestamp();
-                await addDoc(collectionRef, orderData);
+                batch.set(newOrderRef, orderData);
+
+                // Cria o débito correspondente na conta do cliente
+                const newTransactionRef = doc(transactionRef);
+                batch.set(newTransactionRef, {
+                    clientId: orderData.clientId,
+                    clientName: orderData.clientName,
+                    type: 'debit',
+                    amount: finalTotalValue,
+                    date: orderData.openDate,
+                    description: `Referente à O.S. #${newOrderNumber} - Paciente: ${orderData.patientName}`,
+                    orderId: newOrderRef.id, // Associa o débito ao ID da nova O.S.
+                    createdAt: serverTimestamp()
+                });
             }
+            
+            await batch.commit(); // Executa todas as operações (salvar O.S. e transação)
             onClose();
-        } catch (error) { console.error("Error saving service order: ", error); }
+
+        } catch (error) { 
+            console.error("Error saving service order and transaction: ", error); 
+            alert("Ocorreu um erro ao salvar a Ordem de Serviço.");
+        }
     };
+
 
     return (
         <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
@@ -715,12 +773,27 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
 
     const handleDelete = async (id) => {
         if (!userId) return;
-        if (window.confirm('Tem certeza que deseja excluir esta ordem de serviço?')) {
+        if (window.confirm('Tem certeza que deseja excluir esta ordem de serviço? Esta ação é permanente e também removerá o débito da conta do cliente.')) {
             try {
-                const docRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, id);
-                await deleteDoc(docRef);
+                const batch = writeBatch(db);
+
+                // Deleta a O.S.
+                const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, id);
+                batch.delete(orderRef);
+                
+                // Encontra e deleta a transação de débito associada
+                const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
+                const q = query(transactionRef, where("orderId", "==", id), where("type", "==", "debit"));
+                const debitSnapshot = await getDocs(q);
+                if (!debitSnapshot.empty) {
+                    const debitDoc = debitSnapshot.docs[0];
+                    batch.delete(debitDoc.ref);
+                }
+
+                await batch.commit();
+
             } catch (error) {
-                console.error("Error deleting service order: ", error);
+                console.error("Error deleting service order and transaction: ", error);
             }
         }
     };
@@ -788,42 +861,30 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
         try {
             const updateData = { status: newStatus };
-            const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
     
             if (newStatus === 'Concluído') {
-                const completionDate = new Date().toISOString().split('T')[0];
-                updateData.completionDate = completionDate;
-                
                 const order = orders.find(o => o.id === orderId);
-                if (order && order.totalValue > 0) {
-                    const q = query(transactionRef, where("orderId", "==", orderId), where("type", "==", "debit"));
-                    const existingDebitSnapshot = await getDocs(q);
-    
-                    if (existingDebitSnapshot.empty) {
-                        await addDoc(transactionRef, {
-                            clientId: order.clientId,
-                            clientName: order.clientName,
-                            type: 'debit',
-                            amount: order.totalValue,
-                            date: completionDate,
-                            description: `Referente à O.S. #${order.number} - Paciente: ${order.patientName}`,
-                            orderId: order.id,
-                            createdAt: serverTimestamp()
-                        });
-                    }
+                if (!order.completionDate) {
+                   updateData.completionDate = new Date().toISOString().split('T')[0];
                 }
             } else {
                 updateData.completionDate = null;
-                const q = query(transactionRef, where("orderId", "==", orderId), where("type", "==", "debit"));
-                const existingDebitSnapshot = await getDocs(q);
-
-                if (!existingDebitSnapshot.empty) {
-                    const debitDoc = existingDebitSnapshot.docs[0];
-                    await deleteDoc(debitDoc.ref);
-                }
             }
     
-            await updateDoc(orderRef, updateData);
+            // Se o status for "Cancelado", a lógica de estorno está na tela de ClientAccounts
+            // Para manter a consistência, o ideal é editar a O.S. e mudar o status lá.
+            if (newStatus === 'Cancelado') {
+                 if (window.confirm('Cancelar uma O.S. por aqui apenas muda o status. Para estornar o valor da conta do cliente, vá até Financeiro > Contas Correntes. Deseja continuar?')) {
+                     await updateDoc(orderRef, updateData);
+                 } else {
+                     // Recarrega a página ou o estado para reverter a mudança visual do select
+                     window.location.reload(); 
+                     return; 
+                 }
+            } else {
+                 await updateDoc(orderRef, updateData);
+            }
+            
         } catch (error) {
             console.error("Error updating status: ", error);
             alert("Ocorreu um erro ao atualizar o status da O.S.");
