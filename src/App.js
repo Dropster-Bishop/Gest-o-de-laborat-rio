@@ -856,6 +856,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
     const handlePrint = () => generatePdf('print');
     const handleSaveAsPdf = () => generatePdf('save');
 
+    // MODIFICAÇÃO 1: Função de mudança de status simplificada
     const handleStatusChange = async (orderId, newStatus) => {
         if (!userId) return;
         const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
@@ -871,13 +872,10 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                 updateData.completionDate = null;
             }
     
-            // Se o status for "Cancelado", a lógica de estorno está na tela de ClientAccounts
-            // Para manter a consistência, o ideal é editar a O.S. e mudar o status lá.
             if (newStatus === 'Cancelado') {
                  if (window.confirm('Cancelar uma O.S. por aqui apenas muda o status. Para estornar o valor da conta do cliente, vá até Financeiro > Contas Correntes. Deseja continuar?')) {
                      await updateDoc(orderRef, updateData);
                  } else {
-                     // Recarrega a página ou o estado para reverter a mudança visual do select
                      window.location.reload(); 
                      return; 
                  }
@@ -888,6 +886,67 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         } catch (error) {
             console.error("Error updating status: ", error);
             alert("Ocorreu um erro ao atualizar o status da O.S.");
+        }
+    };
+
+    // MODIFICAÇÃO 2: Função para criar débitos faltantes em dados antigos
+    const createMissingDebits = async () => {
+        if (!userId) {
+            alert("Utilizador não encontrado.");
+            return;
+        }
+
+        console.log("Iniciando a verificação de débitos em falta...");
+        alert("Iniciando a verificação. Este processo pode demorar um pouco. Aguarde o alerta de conclusão.");
+
+        try {
+            const batch = writeBatch(db);
+
+            const ordersRef = collection(db, `artifacts/${appId}/users/${userId}/serviceOrders`);
+            const ordersSnapshot = await getDocs(ordersRef);
+            const allOrders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            const transactionsRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
+            const q = query(transactionsRef, where("type", "==", "debit"));
+            const transactionsSnapshot = await getDocs(q);
+
+            const ordersWithDebit = new Set(transactionsSnapshot.docs.map(doc => doc.data().orderId));
+            
+            let debitsCreatedCount = 0;
+
+            allOrders.forEach(order => {
+                if (!ordersWithDebit.has(order.id)) {
+                    console.log(`Débito em falta encontrado para O.S. #${order.number}. Adicionando à correção.`);
+                    
+                    const newTransactionRef = doc(transactionsRef);
+                    
+                    batch.set(newTransactionRef, {
+                        clientId: order.clientId,
+                        clientName: order.clientName,
+                        type: 'debit',
+                        amount: order.totalValue,
+                        date: order.openDate,
+                        description: `Referente à O.S. #${order.number} - Paciente: ${order.patientName}`,
+                        orderId: order.id,
+                        createdAt: serverTimestamp()
+                    });
+                    debitsCreatedCount++;
+                }
+            });
+
+            if (debitsCreatedCount > 0) {
+                await batch.commit();
+                alert(`${debitsCreatedCount} débito(s) em falta foram criados com sucesso! O seu painel de Contas de Cliente agora está atualizado.`);
+            } else {
+                alert("Nenhum débito em falta foi encontrado. Os seus dados já estão corretos.");
+            }
+            
+            console.log("Verificação concluída.");
+            window.location.reload();
+
+        } catch (error) {
+            console.error("Erro ao criar débitos em falta: ", error);
+            alert("Ocorreu um erro grave ao tentar corrigir os dados. Verifique o console para mais detalhes.");
         }
     };
 
@@ -919,6 +978,11 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             <header className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <h1 className="text-3xl font-bold text-white">Ordens de Serviço</h1>
                 <div className="w-full md:w-auto flex flex-col md:flex-row items-center gap-2">
+                    {/* MODIFICAÇÃO 2: Botão temporário para corrigir os dados */}
+                    <Button onClick={createMissingDebits} variant="danger" className="w-full md:w-auto">
+                        Corrigir Débitos Antigos
+                    </Button>
+
                     <div className="relative w-full md:w-64">
                         <LucideSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={20} />
                         <Input
