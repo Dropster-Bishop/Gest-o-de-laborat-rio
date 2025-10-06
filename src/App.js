@@ -2244,6 +2244,12 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // MODIFICAÇÃO: Cálculo do valor total em carteira
+    // Soma o valor de todas as ordens que não foram canceladas.
+    const totalPortfolioValue = orders
+        .filter(order => order.status !== 'Cancelado')
+        .reduce((sum, order) => sum + (order.totalValue || 0), 0);
+
     const COLORS = ['#D4AF37', '#B8860B', '#8B6914', '#FFD700', '#F0E68C'];
 
     const handleFilter = () => {
@@ -2327,33 +2333,40 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
                 <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Contas Correntes</Button>
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                <div className="bg-neutral-900 p-4 rounded-2xl shadow-md flex flex-col md:flex-row flex-wrap items-end gap-4">
-                    <div className="flex-1 min-w-[150px]">
-                        <label htmlFor="period-select" className="block text-sm font-medium text-neutral-300 mb-1">Período Rápido</label>
-                        <select id="period-select" value={period} onChange={e => setPeriod(e.target.value)} className="w-full bg-neutral-800 border border-neutral-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-yellow-500">
-                            <option value="thisMonth">Este Mês</option>
-                            <option value="last30days">Últimos 30 Dias</option>
-                            <option value="thisYear">Este Ano</option>
-                            <option value="custom">Customizado</option>
-                        </select>
-                    </div>
-                    {period === 'custom' && (
-                        <>
-                           <Input className="flex-1 min-w-[150px]" label="Data de Início" type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
-                           <Input className="flex-1 min-w-[150px]" label="Data de Fim" type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
-                        </>
-                    )}
-                    <div className="self-end">
-                       <Button onClick={handleFilter} className="h-11">Filtrar</Button>
-                    </div>
+            <div className="bg-neutral-900 p-4 rounded-2xl shadow-md flex flex-col md:flex-row flex-wrap items-end gap-4">
+                <div className="flex-1 min-w-[150px]">
+                    <label htmlFor="period-select" className="block text-sm font-medium text-neutral-300 mb-1">Período Rápido</label>
+                    <select id="period-select" value={period} onChange={e => setPeriod(e.target.value)} className="w-full bg-neutral-800 border border-neutral-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-yellow-500">
+                        <option value="thisMonth">Este Mês</option>
+                        <option value="last30days">Últimos 30 Dias</option>
+                        <option value="thisYear">Este Ano</option>
+                        <option value="custom">Customizado</option>
+                    </select>
                 </div>
+                {period === 'custom' && (
+                    <>
+                       <Input className="flex-1 min-w-[150px]" label="Data de Início" type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
+                       <Input className="flex-1 min-w-[150px]" label="Data de Fim" type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
+                    </>
+                )}
+                <div className="self-end">
+                   <Button onClick={handleFilter} className="h-11">Filtrar</Button>
+                </div>
+            </div>
 
+            {/* MODIFICAÇÃO: Layout para os cards de resumo */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <StatCard 
                     icon={<LucideClipboardEdit size={40} className="text-purple-400" />} 
-                    label="Faturamento Bruto (O.S. Concluídas no período)" 
+                    label="Faturamento Bruto (Concluídas no período)" 
                     value={`R$ ${data.grossRevenue.toFixed(2)}`} 
                     color="border-purple-400" 
+                />
+                <StatCard 
+                    icon={<LucideDollarSign size={40} className="text-teal-400" />} 
+                    label="Valor Bruto Total em Carteira (Não canceladas)" 
+                    value={`R$ ${totalPortfolioValue.toFixed(2)}`} 
+                    color="border-teal-400" 
                 />
             </div>
 
@@ -2372,8 +2385,6 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
         </div>
     );
 };
-
-
 const LoginScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [isPasswordReset, setIsPasswordReset] = useState(false);
