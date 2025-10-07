@@ -3,8 +3,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 
 // --- Dependências ---
 import { initializeApp } from 'firebase/app';
-import jsPDF from 'jspdf'; // Importação corrigida
-import html2canvas from 'html2canvas'; // Importação corrigida
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import {
     getAuth,
     onAuthStateChanged,
@@ -35,7 +35,7 @@ import {
     LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch,
     LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock,
     LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle,
-    LucideChevronDown, LucideSettings, LucideFileText, LucideTruck
+    LucideChevronDown, LucideSettings, LucideFileText, LucideTruck, LucideReceipt
 } from 'lucide-react';
 
 // --- Configuração do Firebase ---
@@ -214,7 +214,7 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
         fields.forEach(field => {
             const inputElement = formRef.current[field.name];
             if (inputElement) {
-                if (inputElement.type === 'textarea') {
+                if (inputElement.type === 'textarea' || inputElement.type === 'select-one') {
                     formData[field.name] = inputElement.value;
                 } else {
                     formData[field.name] = inputElement.value;
@@ -314,9 +314,8 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                                             defaultValue={currentItem ? currentItem[field.name] : ''}
                                             className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500 text-white"
                                         >
-                                            <option value="">{field.placeholder}</option>
-                                            {customProps[field.optionsKey]?.map(option => (
-                                                <option key={option.id} value={option.id}>{option.name}</option>
+                                           {field.options.map(option => (
+                                                <option key={option.value} value={option.value}>{option.label}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -344,6 +343,81 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                 </Modal>
             )}
         </div>
+    );
+};
+
+// --- NOVO COMPONENTE: CONTAS A PAGAR ---
+const AccountsPayable = () => {
+    const expenseCategories = [
+        'Salários', 'Aluguel', 'Contas (Água, Luz, Internet)', 'Marketing',
+        'Impostos', 'Fornecedores / Matéria-prima', 'Manutenção', 'Outros'
+    ];
+
+    const getStatusClasses = (status) => {
+        switch (status) {
+            case 'Pago': return 'bg-green-100 text-green-800';
+            case 'A Pagar': return 'bg-yellow-100 text-yellow-800';
+            default: return 'bg-neutral-100 text-neutral-800';
+        }
+    };
+
+    return (
+        <ManageGeneric
+            collectionName="expenses"
+            title="Contas a Pagar"
+            fields={[
+                { name: 'description', label: 'Descrição da Despesa', type: 'text', required: true },
+                {
+                    name: 'category', label: 'Categoria', type: 'select', required: true, options: [
+                        { value: '', label: 'Selecione uma categoria' },
+                        ...expenseCategories.map(cat => ({ value: cat, label: cat }))
+                    ]
+                },
+                { name: 'amount', label: 'Valor (R$)', type: 'number', required: true },
+                { name: 'dueDate', label: 'Data de Vencimento', type: 'date', required: true },
+                {
+                    name: 'status', label: 'Status', type: 'select', required: true, options: [
+                        { value: 'A Pagar', label: 'A Pagar' },
+                        { value: 'Pago', label: 'Pago' }
+                    ]
+                }
+            ]}
+            renderItem={(items, onEdit, onDelete) => (
+                <table className="w-full text-sm text-left text-neutral-400">
+                    <thead className="text-xs text-neutral-300 uppercase bg-neutral-800">
+                        <tr>
+                            <th scope="col" className="px-6 py-3">Descrição</th>
+                            <th scope="col" className="px-6 py-3">Categoria</th>
+                            <th scope="col" className="px-6 py-3">Vencimento</th>
+                            <th scope="col" className="px-6 py-3 text-right">Valor</th>
+                            <th scope="col" className="px-6 py-3 text-center">Status</th>
+                            <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {items.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(item => (
+                            <tr key={item.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-neutral-800">
+                                <td className="px-6 py-4 font-medium text-white">{item.description}</td>
+                                <td className="px-6 py-4">{item.category}</td>
+                                <td className="px-6 py-4">{new Date(item.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                <td className="px-6 py-4 text-right font-semibold text-red-400">R$ {item.amount?.toFixed(2)}</td>
+                                <td className="px-6 py-4 text-center">
+                                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusClasses(item.status)}`}>
+                                        {item.status}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                    <div className="flex justify-center items-center gap-2">
+                                        <button onClick={() => onEdit(item)} className="text-blue-400 hover:text-blue-300 p-1"><LucideEdit size={18} /></button>
+                                        <button onClick={() => onDelete(item.id)} className="text-red-500 hover:text-red-400 p-1"><LucideTrash2 size={18} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
+        />
     );
 };
 
@@ -597,7 +671,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         </select>
                     </div>
                     <Input label="Nome do Paciente" id="patientName" type="text" ref={el => formRef.current.patientName = el} defaultValue={order?.patientName} required />
-                    <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate} required />
+                    <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate || new Date().toISOString().split('T')[0]} required />
                     <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required />
                 </div>
                 {/* FUNCIONÁRIOS */}
@@ -1919,7 +1993,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
             <div className="lg:col-span-1 bg-neutral-900 p-6 rounded-2xl shadow-md self-start">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-white">Contas de Clientes</h2>
-                    <Button onClick={() => setActivePage('financials')} variant="secondary" className="py-1 px-2 text-xs">
+                     <Button onClick={() => setActivePage('financials')} variant="secondary" className="py-1 px-2 text-xs">
                         Voltar
                     </Button>
                 </div>
@@ -2155,18 +2229,12 @@ const Settings = ({ userId, initialProfile }) => {
     );
 };
 
-const FinancialDashboard = ({ orders, setActivePage }) => {
+const FinancialDashboard = ({ orders, expenses, setActivePage }) => {
     const [period, setPeriod] = useState('thisMonth');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-
-    // MODIFICAÇÃO: Cálculo do valor total em carteira
-    // Soma o valor de todas as ordens que não foram canceladas.
-    const totalPortfolioValue = orders
-        .filter(order => order.status !== 'Cancelado')
-        .reduce((sum, order) => sum + (order.totalValue || 0), 0);
 
     const COLORS = ['#D4AF37', '#B8860B', '#8B6914', '#FFD700', '#F0E68C'];
 
@@ -2205,11 +2273,20 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
         endDate.setHours(23, 59, 59, 999);
 
         const completedOrdersInPeriod = orders.filter(o => {
+            if (o.status !== 'Concluído' || !o.completionDate) return false;
             const completionDate = new Date(o.completionDate);
-            return o.status === 'Concluído' && completionDate >= startDate && completionDate <= endDate;
+            return completionDate >= startDate && completionDate <= endDate;
+        });
+
+        const paidExpensesInPeriod = expenses.filter(e => {
+            if (e.status !== 'Pago' || !e.dueDate) return false;
+            const paymentDate = new Date(e.dueDate);
+            return paymentDate >= startDate && paymentDate <= endDate;
         });
 
         const grossRevenue = completedOrdersInPeriod.reduce((sum, o) => sum + o.totalValue, 0);
+        const totalExpenses = paidExpensesInPeriod.reduce((sum, e) => sum + e.amount, 0);
+        const netProfit = grossRevenue - totalExpenses;
 
         const revenueByClient = completedOrdersInPeriod.reduce((acc, order) => {
             acc[order.clientName] = (acc[order.clientName] || 0) + order.totalValue;
@@ -2220,10 +2297,17 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
             .sort(([, a], [, b]) => b - a)
             .slice(0, 5)
             .map(([name, value]) => ({ name, value }));
+        
+        const totalPortfolioValue = orders
+            .filter(order => order.status !== 'Cancelado')
+            .reduce((sum, order) => sum + (order.totalValue || 0), 0);
 
         setData({
             grossRevenue,
+            totalExpenses,
+            netProfit,
             topClients,
+            totalPortfolioValue
         });
 
         setLoading(false);
@@ -2231,14 +2315,8 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
 
     useEffect(() => {
         handleFilter();
-    }, [orders]);
+    }, [orders, expenses, period]);
 
-    useEffect(() => {
-        if (period !== 'custom') {
-            setCustomStartDate('');
-            setCustomEndDate('');
-        }
-    }, [period]);
 
     if (loading || !data) {
         return <Spinner />;
@@ -2246,11 +2324,8 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
 
     return (
         <div className="animate-fade-in space-y-6">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                <h1 className="text-3xl font-bold text-white">Dashboard Financeiro</h1>
-                <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Contas Correntes</Button>
-            </div>
-
+            <h1 className="text-3xl font-bold text-white">Dashboard Financeiro</h1>
+           
             <div className="bg-neutral-900 p-4 rounded-2xl shadow-md flex flex-col md:flex-row flex-wrap items-end gap-4">
                 <div className="flex-1 min-w-[150px]">
                     <label htmlFor="period-select" className="block text-sm font-medium text-neutral-300 mb-1">Período Rápido</label>
@@ -2272,18 +2347,31 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
                 </div>
             </div>
 
-            {/* MODIFICAÇÃO: Layout para os cards de resumo */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <StatCard
-                    icon={<LucideClipboardEdit size={40} className="text-purple-400" />}
-                    label="Faturamento Bruto (Concluídas no período)"
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 <StatCard
+                    icon={<LucideDollarSign size={40} className="text-green-500" />}
+                    label="Faturamento Bruto (no período)"
                     value={`R$ ${data.grossRevenue.toFixed(2)}`}
-                    color="border-purple-400"
+                    color="border-green-500"
                 />
-                <StatCard
-                    icon={<LucideDollarSign size={40} className="text-teal-400" />}
+                 <StatCard
+                    icon={<LucideReceipt size={40} className="text-red-500" />}
+                    label="Despesas Pagas (no período)"
+                    value={`R$ ${data.totalExpenses.toFixed(2)}`}
+                    color="border-red-500"
+                />
+                 <StatCard
+                    icon={<LucideBarChart3 size={40} className="text-yellow-500" />}
+                    label="Lucro Líquido (no período)"
+                    value={`R$ ${data.netProfit.toFixed(2)}`}
+                    color="border-yellow-500"
+                />
+            </div>
+             <div className="grid grid-cols-1 gap-6">
+                 <StatCard
+                    icon={<LucideClipboardEdit size={40} className="text-teal-400" />}
                     label="Valor Bruto Total em Carteira (Não canceladas)"
-                    value={`R$ ${totalPortfolioValue.toFixed(2)}`}
+                    value={`R$ ${data.totalPortfolioValue.toFixed(2)}`}
                     color="border-teal-400"
                 />
             </div>
@@ -2469,6 +2557,7 @@ const AppLayout = ({ user, userProfile }) => {
     const [priceTables, setPriceTables] = useState([]);
     const [inventory, setInventory] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
+    const [expenses, setExpenses] = useState([]); // --- ADICIONADO: Estado para despesas
     const [companyProfile, setCompanyProfile] = useState(null);
 
     useEffect(() => {
@@ -2481,6 +2570,7 @@ const AppLayout = ({ user, userProfile }) => {
             priceTables: setPriceTables,
             inventory: setInventory,
             suppliers: setSuppliers,
+            expenses: setExpenses, // --- ADICIONADO: Carregamento de despesas
         };
         const unsubscribers = Object.entries(collections).map(([name, setter]) => {
             const q = query(collection(db, `artifacts/${appId}/users/${user.uid}/${name}`));
@@ -2717,8 +2807,11 @@ const AppLayout = ({ user, userProfile }) => {
             case 'service-orders':
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
 
+            // --- ROTAS FINANCEIRAS ATUALIZADAS ---
             case 'financials':
-                return <FinancialDashboard orders={serviceOrders} setActivePage={setActivePage} />;
+                return <FinancialDashboard orders={serviceOrders} expenses={expenses} setActivePage={setActivePage} />;
+            case 'financials-payable':
+                return <AccountsPayable />;
             case 'financials-ledger':
                 return <ClientAccounts userId={user.uid} clients={clients} orders={serviceOrders} setActivePage={setActivePage} />;
 
@@ -2734,9 +2827,7 @@ const AppLayout = ({ user, userProfile }) => {
     };
 
     const NavItem = ({ icon, label, page, activePage, setActivePage }) => {
-        const isFinancialPage = page === 'financials' && (activePage === 'financials' || activePage === 'financials-ledger');
-        const isActive = activePage === page || isFinancialPage;
-
+        const isActive = activePage === page;
         return (
             <li>
                 <a
@@ -2753,6 +2844,32 @@ const AppLayout = ({ user, userProfile }) => {
             </li>
         )
     };
+    
+    // --- NOVO COMPONENTE: DROPDOWN FINANCEIRO ---
+    const FinancialNav = ({ activePage, setActivePage }) => {
+        const [isOpen, setIsOpen] = useState(false);
+        const isFinancialPage = activePage.startsWith('financials');
+
+        return (
+            <li>
+                <button
+                    onClick={() => setIsOpen(!isOpen)}
+                    className={`flex items-center p-3 text-base font-normal rounded-lg transition-all duration-200 w-full ${isFinancialPage ? 'bg-yellow-500 text-black shadow-lg' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'}`}
+                >
+                    <LucideDollarSign />
+                    <span className="ml-3 flex-1 whitespace-nowrap text-left">Financeiro</span>
+                    <LucideChevronDown className={`transform transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {isOpen && (
+                    <ul className="py-2 space-y-2 pl-4">
+                        <NavItem icon={<LucideBarChart3 />} label="Dashboard" page="financials" activePage={activePage} setActivePage={setActivePage} />
+                        <NavItem icon={<LucideReceipt />} label="Contas a Pagar" page="financials-payable" activePage={activePage} setActivePage={setActivePage} />
+                        <NavItem icon={<LucideFileText />} label="Contas de Clientes" page="financials-ledger" activePage={activePage} setActivePage={setActivePage} />
+                    </ul>
+                )}
+            </li>
+        );
+    };
 
     return (
         <div className="flex h-full text-white">
@@ -2766,7 +2883,10 @@ const AppLayout = ({ user, userProfile }) => {
                         <ul className="space-y-2">
                             <NavItem icon={<LucideBarChart3 />} label="Painel" page="dashboard" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideListOrdered />} label="Ordens de Serviço" page="service-orders" activePage={activePage} setActivePage={setActivePage} />
-                            <NavItem icon={<LucideDollarSign />} label="Financeiro" page="financials" activePage={activePage} setActivePage={setActivePage} />
+                            
+                            {/* --- MENU FINANCEIRO ATUALIZADO --- */}
+                            <FinancialNav activePage={activePage} setActivePage={setActivePage} />
+
                             <NavItem icon={<LucideUsers />} label="Clientes" page="clients" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideUsers />} label="Funcionários" page="employees" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideHammer />} label="Serviços" page="services" activePage={activePage} setActivePage={setActivePage} />
