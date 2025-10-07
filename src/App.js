@@ -38,6 +38,39 @@ import {
     LucideChevronDown, LucideSettings, LucideFileText, LucideTruck
 } from 'lucide-react';
 
+// NOVO COMPONENTE DE ÍCONES PRÉ-SELECIONADOS
+const DentalIcon = ({ name, className = "h-8 w-8 text-yellow-500 flex-shrink-0" }) => {
+    switch (name) {
+        case 'molar':
+            return (
+                <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M5.583 8.333C5.583 8.333 4.25 11.5 5.583 13.5C6.916 15.5 8.666 16.5 8.666 16.5L8.5 21L11.5 19L12.5 21L15.5 19L16 21L16.333 16.5C16.333 16.5 18.083 15.5 19.416 13.5C20.75 11.5 19.416 8.333 19.416 8.333C17.5 5.5 15.416 4.5 15.416 4.5C14.583 3.833 13.583 3.5 12.5 3.5C11.417 3.5 10.417 3.833 9.583 4.5C9.583 4.5 7.5 5.5 5.583 8.333Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            );
+        case 'implant':
+            return (
+                <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M15.1 8.1L13 6L14.5 3H9.5L11 6L8.9 8.1C6.3 9.4 4.1 12.1 4.2 15.2C4.3 18.2 6.7 21 10 21H14C17.3 21 19.7 18.2 19.8 15.2C19.9 12.1 17.7 9.4 15.1 8.1V8.1Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M12 15H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M12 12H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            );
+        case 'denture':
+            return (
+                <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M21 14C21 17.866 17.866 21 14 21H10C6.13401 21 3 17.866 3 14M21 14V11C21 6.58172 17.4183 3 13 3H11C6.58172 3 3 6.58172 3 11V14M21 14H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M6 11V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M9 11V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M12 11V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M15 11V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M18 11V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            );
+        default: // Ícone padrão caso nenhum seja selecionado
+            return <LucideClipboardEdit className={className} />;
+    }
+};
+
 // --- Configuração do Firebase ---
 const firebaseConfig = {
     apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -145,8 +178,8 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
                                         <p className="text-sm text-neutral-400">Entrega em: {new Date(order.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
                                     </div>
                                     <span className={`px-3 py-1 text-sm font-medium rounded-full ${order.status === 'Pendente' ? 'bg-yellow-100 text-yellow-800' :
-                                            order.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
-                                                'bg-green-100 text-green-800'
+                                        order.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
+                                            'bg-green-100 text-green-800'
                                         }`}>{order.status}</span>
                                 </li>
                             ))}
@@ -491,7 +524,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         });
 
         const totalCommissionValue = finalAssignedEmployees.reduce((sum, emp) => sum + emp.commissionValue, 0);
-        
+
         const status = formRef.current.status.value;
         let completionDateValue = formRef.current.completionDate.value || null;
 
@@ -536,14 +569,14 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
 
                 if (!existingDebitSnapshot.empty) {
                     const debitDoc = existingDebitSnapshot.docs[0];
-                    batch.update(debitDoc.ref, { 
+                    batch.update(debitDoc.ref, {
                         amount: finalTotalValue,
                         description: `Referente à O.S. #${order.number} - Paciente: ${orderData.patientName}`
                     });
                 } else {
-                     // Caso o débito não exista por algum motivo, cria um novo
-                     const newTransactionRef = doc(transactionRef);
-                     batch.set(newTransactionRef, {
+                    // Caso o débito não exista por algum motivo, cria um novo
+                    const newTransactionRef = doc(transactionRef);
+                    batch.set(newTransactionRef, {
                         clientId: orderData.clientId,
                         clientName: orderData.clientName,
                         type: 'debit',
@@ -558,7 +591,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 // --- CRIANDO UMA NOVA O.S. ---
                 const newOrderRef = doc(ordersCollectionRef);
                 const newOrderNumber = lastOrderNumber + 1;
-                
+
                 orderData.number = newOrderNumber;
                 orderData.createdAt = serverTimestamp();
                 batch.set(newOrderRef, orderData);
@@ -576,12 +609,12 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     createdAt: serverTimestamp()
                 });
             }
-            
+
             await batch.commit(); // Executa todas as operações (salvar O.S. e transação)
             onClose();
 
-        } catch (error) { 
-            console.error("Error saving service order and transaction: ", error); 
+        } catch (error) {
+            console.error("Error saving service order and transaction: ", error);
             alert("Ocorreu um erro ao salvar a Ordem de Serviço.");
         }
     };
@@ -780,7 +813,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                 // Deleta a O.S.
                 const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, id);
                 batch.delete(orderRef);
-                
+
                 // Encontra e deleta a transação de débito associada
                 const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
                 const q = query(transactionRef, where("orderId", "==", id), where("type", "==", "debit"));
@@ -804,7 +837,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             alert('Não foi possível encontrar o conteúdo para gerar o PDF.');
             return;
         }
-        
+
         const elementsToHide = input.querySelectorAll('.hide-on-print');
         elementsToHide.forEach(el => el.style.visibility = 'hidden');
 
@@ -862,27 +895,27 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
         try {
             const updateData = { status: newStatus };
-    
+
             if (newStatus === 'Concluído') {
                 const order = orders.find(o => o.id === orderId);
                 if (!order.completionDate) {
-                   updateData.completionDate = new Date().toISOString().split('T')[0];
+                    updateData.completionDate = new Date().toISOString().split('T')[0];
                 }
             } else {
                 updateData.completionDate = null;
             }
-    
+
             if (newStatus === 'Cancelado') {
-                 if (window.confirm('Cancelar uma O.S. por aqui apenas muda o status. Para estornar o valor da conta do cliente, vá até Financeiro > Contas Correntes. Deseja continuar?')) {
-                     await updateDoc(orderRef, updateData);
-                 } else {
-                     window.location.reload(); 
-                     return; 
-                 }
+                if (window.confirm('Cancelar uma O.S. por aqui apenas muda o status. Para estornar o valor da conta do cliente, vá até Financeiro > Contas Correntes. Deseja continuar?')) {
+                    await updateDoc(orderRef, updateData);
+                } else {
+                    window.location.reload();
+                    return;
+                }
             } else {
-                 await updateDoc(orderRef, updateData);
+                await updateDoc(orderRef, updateData);
             }
-            
+
         } catch (error) {
             console.error("Error updating status: ", error);
             alert("Ocorreu um erro ao atualizar o status da O.S.");
@@ -911,15 +944,15 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             const transactionsSnapshot = await getDocs(q);
 
             const ordersWithDebit = new Set(transactionsSnapshot.docs.map(doc => doc.data().orderId));
-            
+
             let debitsCreatedCount = 0;
 
             allOrders.forEach(order => {
                 if (!ordersWithDebit.has(order.id)) {
                     console.log(`Débito em falta encontrado para O.S. #${order.number}. Adicionando à correção.`);
-                    
+
                     const newTransactionRef = doc(transactionsRef);
-                    
+
                     batch.set(newTransactionRef, {
                         clientId: order.clientId,
                         clientName: order.clientName,
@@ -940,7 +973,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             } else {
                 alert("Nenhum débito em falta foi encontrado. Os seus dados já estão corretos.");
             }
-            
+
             console.log("Verificação concluída.");
             window.location.reload();
 
@@ -963,13 +996,13 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
     const filteredOrders = orders.filter(order => {
         const matchesFilter = filter === 'Todos' || order.status === filter;
         const lowerCaseSearchTerm = searchTerm.toLowerCase();
-        
+
         const matchesSearch = searchTerm === '' ||
             String(order.number) === searchTerm.trim() ||
             order.clientName.toLowerCase().includes(lowerCaseSearchTerm) ||
             order.patientName.toLowerCase().includes(lowerCaseSearchTerm) ||
             (order.employeeName && order.employeeName.toLowerCase().includes(lowerCaseSearchTerm));
-            
+
         return matchesFilter && matchesSearch;
     });
 
@@ -1157,7 +1190,7 @@ const Reports = ({ orders, employees, clients }) => {
         commissionsByEmployee: 'Relatório de Comissões por Funcionário',
         ordersByClient: 'Relatório de Ordens por Cliente'
     };
-    
+
     const handleGenerateReport = () => {
         const parseLocalDate = (dateString) => {
             if (!dateString) return null;
@@ -1167,7 +1200,7 @@ const Reports = ({ orders, employees, clients }) => {
 
         const start = parseLocalDate(startDate);
         const end = parseLocalDate(endDate);
-        
+
         if (end) {
             end.setHours(23, 59, 59, 999);
         }
@@ -1177,7 +1210,7 @@ const Reports = ({ orders, employees, clients }) => {
             data = orders.filter(o => {
                 const completed = o.status === 'Concluído' && o.completionDate;
                 if (!completed) return false;
-                
+
                 const completionDate = parseLocalDate(o.completionDate);
                 if (!completionDate) return false;
 
@@ -1198,7 +1231,7 @@ const Reports = ({ orders, employees, clients }) => {
 
                 const completionDate = parseLocalDate(o.completionDate);
                 if (!completionDate) return false;
-                
+
                 if (start && completionDate < start) return false;
                 if (end && completionDate > end) return false;
                 return true;
@@ -1215,8 +1248,8 @@ const Reports = ({ orders, employees, clients }) => {
                 if (end && completionDate > end) return false;
                 return true;
             });
-            
-            data = filteredOrders.flatMap(order => 
+
+            data = filteredOrders.flatMap(order =>
                 order.services.map(service => ({
                     ...service,
                     orderId: order.id,
@@ -1280,7 +1313,7 @@ const Reports = ({ orders, employees, clients }) => {
 
     const handlePrintReport = () => generateReportPdf('print');
     const handleSaveReportAsPdf = () => generateReportPdf('save');
-    
+
     const totalCommission = reportType === 'commissionsByEmployee'
         ? results.reduce((sum, order) => {
             const employeeCommission = order.assignedEmployees?.find(emp => emp.id === selectedEmployee)?.commissionValue || 0;
@@ -1291,7 +1324,7 @@ const Reports = ({ orders, employees, clients }) => {
     const totalValue = reportType === 'ordersByClient'
         ? results.reduce((sum, service) => sum + (service.subtotal || 0), 0)
         : results.reduce((sum, order) => sum + (order.totalValue || 0), 0);
-    
+
     const getReportSubTitle = () => {
         let period = '';
         if (startDate && endDate) {
@@ -1527,7 +1560,7 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
         acc[material].push(service);
         return acc;
     }, {});
-    
+
     const generatePdf = (action = 'print') => {
         const input = printRef.current;
         if (!input) {
@@ -1789,8 +1822,8 @@ const UserManagement = ({ userId }) => {
                                 <td className="px-6 py-4">{user.createdAt?.toDate().toLocaleDateString('pt-BR') || 'N/A'}</td>
                                 <td className="px-6 py-4">
                                     <span className={`px-3 py-1 text-sm font-medium rounded-full ${user.status === 'approved' ? 'bg-green-100 text-green-800' :
-                                            user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                                'bg-red-100 text-red-800'
+                                        user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                            'bg-red-100 text-red-800'
                                         }`}>{user.status === 'approved' ? 'Aprovado' : 'Pendente'}</span>
                                 </td>
                                 <td className="px-6 py-4 text-center">
@@ -1841,7 +1874,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                 const totalDebit = clientTransactions
                     .filter(t => t.type === 'debit')
                     .reduce((sum, t) => sum + t.amount, 0);
-                
+
                 return {
                     ...client,
                     balance: totalCredit - totalDebit
@@ -1863,7 +1896,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
 
         const transactionsRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
         const q = query(transactionsRef, where("clientId", "==", selectedClient.id), orderBy("date", "desc"), orderBy("createdAt", "desc"));
-        
+
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const clientTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setTransactions(clientTransactions);
@@ -1871,12 +1904,12 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
 
         return () => unsubscribe();
     }, [selectedClient, userId]);
-    
+
     const clientOrders = useMemo(() => {
         if (!selectedClient) return [];
         return orders.filter(o => o.clientId === selectedClient.id).sort((a, b) => b.number - a.number);
     }, [selectedClient, orders]);
-    
+
     const handleSelectClient = (client) => {
         setSelectedClient(client);
         setActiveTab('extrato');
@@ -1884,7 +1917,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
 
     const handleSaveCredit = async ({ amount, date, description }) => {
         if (!userId || !selectedClient || !amount || !date) return;
-        
+
         try {
             const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
             await addDoc(transactionRef, {
@@ -1929,12 +1962,12 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                 const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
                 const q = query(transactionRef, where("orderId", "==", order.id), where("type", "==", "debit"));
                 const debitSnapshot = await getDocs(q);
-                
+
                 if (!debitSnapshot.empty) {
                     const debitDoc = debitSnapshot.docs[0];
                     batch.delete(debitDoc.ref);
                 }
-                
+
                 await batch.commit();
                 alert(`O.S. #${order.number} cancelada e débito estornado.`);
 
@@ -1981,7 +2014,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                 pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledImgHeight);
                 heightLeft -= usableHeight;
             }
-            
+
             if (action === 'print') {
                 pdf.autoPrint();
                 window.open(pdf.output('bloburl'), '_blank');
@@ -1993,7 +2026,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
             alert("Ocorreu um erro ao gerar o PDF.");
         });
     };
-    
+
     if (loading) return <Spinner />;
 
     return (
@@ -2008,7 +2041,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                 <div className="space-y-2 max-h-[75vh] overflow-y-auto">
                     {accounts.map(acc => (
                         <div key={acc.id} onClick={() => handleSelectClient(acc)}
-                             className={`p-3 rounded-lg cursor-pointer transition-colors border ${selectedClient?.id === acc.id ? 'bg-yellow-900 border-yellow-600' : 'bg-neutral-800 border-neutral-700 hover:bg-neutral-700'}`}>
+                            className={`p-3 rounded-lg cursor-pointer transition-colors border ${selectedClient?.id === acc.id ? 'bg-yellow-900 border-yellow-600' : 'bg-neutral-800 border-neutral-700 hover:bg-neutral-700'}`}>
                             <div className="flex justify-between items-center">
                                 <span className="font-semibold text-white">{acc.name}</span>
                                 <span className={`font-bold text-lg ${acc.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -2030,11 +2063,11 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                 <p className="text-neutral-300">Detalhes da Conta</p>
                             </div>
                             <div className="flex gap-2">
-                                 <Button onClick={() => generateClientPdf('save')} variant="secondary"><LucideFileDown size={18} /> Salvar PDF</Button>
-                                 <Button onClick={() => generateClientPdf('print')}><LucidePrinter size={18} /> Imprimir</Button>
+                                <Button onClick={() => generateClientPdf('save')} variant="secondary"><LucideFileDown size={18} /> Salvar PDF</Button>
+                                <Button onClick={() => generateClientPdf('print')}><LucidePrinter size={18} /> Imprimir</Button>
                             </div>
                         </header>
-                        
+
                         <div className="flex border-b border-neutral-700 mb-4">
                             <button onClick={() => setActiveTab('extrato')} className={`py-2 px-4 text-sm font-medium ${activeTab === 'extrato' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-neutral-400 hover:text-white'}`}>
                                 Extrato da Conta
@@ -2045,12 +2078,12 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                         </div>
 
                         {activeTab === 'extrato' && (
-                           <div>
+                            <div>
                                 <div className="flex justify-end mb-4">
-                                     <Button onClick={() => setCreditModalOpen(true)}>
-                                         <LucidePlusCircle size={20} />
-                                         Lançar Pagamento (Crédito)
-                                     </Button>
+                                    <Button onClick={() => setCreditModalOpen(true)}>
+                                        <LucidePlusCircle size={20} />
+                                        Lançar Pagamento (Crédito)
+                                    </Button>
                                 </div>
                                 <div className="max-h-[60vh] overflow-y-auto">
                                     <div ref={printRef} className="p-4 bg-white text-neutral-800 rounded">
@@ -2079,8 +2112,8 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                                         </td>
                                                         <td className="px-6 py-4 text-center">
                                                             {t.type === 'credit' && (
-                                                                <button 
-                                                                    onClick={() => handleDeleteTransaction(t.id)} 
+                                                                <button
+                                                                    onClick={() => handleDeleteTransaction(t.id)}
                                                                     className="p-1 text-red-600 hover:text-red-800"
                                                                     title="Excluir Lançamento de Crédito">
                                                                     <LucideTrash2 size={16} />
@@ -2106,9 +2139,9 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                 </div>
                             </div>
                         )}
-                        
+
                         {activeTab === 'os' && (
-                             <div className="max-h-[60vh] overflow-y-auto">
+                            <div className="max-h-[60vh] overflow-y-auto">
                                 <table className="w-full text-sm text-left text-neutral-400">
                                     <thead className="text-xs text-neutral-300 uppercase bg-neutral-800 sticky top-0">
                                         <tr>
@@ -2137,7 +2170,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                                 </td>
                                             </tr>
                                         ))}
-                                         {clientOrders.length === 0 && (
+                                        {clientOrders.length === 0 && (
                                             <tr><td colSpan="6" className="text-center p-8 text-neutral-500">Nenhuma O.S. encontrada para este cliente.</td></tr>
                                         )}
                                     </tbody>
@@ -2190,6 +2223,14 @@ const Settings = ({ userId, initialProfile }) => {
     const [profile, setProfile] = useState(initialProfile || {});
     const [loading, setLoading] = useState(false);
 
+    // Lista de ícones que o usuário pode escolher
+    const iconOptions = [
+        { id: 'default', name: 'Padrão (Prancheta)' },
+        { id: 'molar', name: 'Dente Molar' },
+        { id: 'implant', name: 'Implante' },
+        { id: 'denture', name: 'Prótese' },
+    ];
+
     useEffect(() => {
         setProfile(initialProfile || {});
     }, [initialProfile]);
@@ -2197,6 +2238,16 @@ const Settings = ({ userId, initialProfile }) => {
     const handleChange = (e) => {
         const { name, value } = e.target;
         setProfile(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleIconSelect = (iconId) => {
+        // Se o ícone selecionado for o padrão, removemos a propriedade do perfil
+        if (iconId === 'default') {
+            const { companyIcon, ...rest } = profile;
+            setProfile(rest);
+        } else {
+            setProfile(prev => ({ ...prev, companyIcon: iconId }));
+        }
     };
 
     const handleSave = async () => {
@@ -2217,9 +2268,6 @@ const Settings = ({ userId, initialProfile }) => {
         <div className="animate-fade-in space-y-6">
             <h1 className="text-3xl font-bold text-white">Configurações da Empresa</h1>
             <div className="bg-neutral-900 p-6 rounded-2xl shadow-md">
-                <p className="text-sm text-neutral-400 mb-4">
-                    As informações preenchidas aqui serão usadas no cabeçalho dos seus recibos.
-                </p>
                 <div className="space-y-4 max-w-lg">
                     <Input label="Nome da Empresa / Laboratório" name="companyName" value={profile.companyName || ''} onChange={handleChange} />
                     <Input label="CNPJ ou CPF" name="companyCnpj" value={profile.companyCnpj || ''} onChange={handleChange} />
@@ -2227,7 +2275,32 @@ const Settings = ({ userId, initialProfile }) => {
                     <Input label="Telefone de Contato" name="companyPhone" value={profile.companyPhone || ''} onChange={handleChange} />
                     <Input label="Email de Contato" name="companyEmail" value={profile.companyEmail || ''} onChange={handleChange} />
                 </div>
-                <div className="mt-6">
+
+                {/* Seção para escolher o ícone */}
+                <div className="mt-8 border-t border-neutral-700 pt-6">
+                    <h2 className="text-xl font-bold text-neutral-200 mb-3">Ícone da Empresa</h2>
+                    <p className="text-sm text-neutral-400 mb-4">
+                        Escolha um ícone para representar sua empresa na barra lateral.
+                    </p>
+                    <div className="flex flex-wrap gap-4">
+                        {iconOptions.map(icon => {
+                            const isSelected = (profile.companyIcon === icon.id) || (!profile.companyIcon && icon.id === 'default');
+                            return (
+                                <div
+                                    key={icon.id}
+                                    onClick={() => handleIconSelect(icon.id)}
+                                    className={`p-4 rounded-lg border-2 cursor-pointer flex flex-col items-center gap-2 w-32 text-center transition-all ${isSelected ? 'border-yellow-500 bg-yellow-900 bg-opacity-30' : 'border-neutral-700 hover:border-neutral-500'
+                                        }`}
+                                >
+                                    <DentalIcon name={icon.id} className="h-10 w-10 text-neutral-300" />
+                                    <span className="text-xs text-neutral-300">{icon.name}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="mt-8 border-t border-neutral-700 pt-6">
                     <Button onClick={handleSave} disabled={loading}>
                         {loading ? 'Salvando...' : 'Salvar Configurações'}
                     </Button>
@@ -2285,36 +2358,36 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
 
         startDate.setHours(0, 0, 0, 0);
         endDate.setHours(23, 59, 59, 999);
-        
+
         const completedOrdersInPeriod = orders.filter(o => {
             const completionDate = new Date(o.completionDate);
             return o.status === 'Concluído' && completionDate >= startDate && completionDate <= endDate;
         });
-        
+
         const grossRevenue = completedOrdersInPeriod.reduce((sum, o) => sum + o.totalValue, 0);
 
         const revenueByClient = completedOrdersInPeriod.reduce((acc, order) => {
             acc[order.clientName] = (acc[order.clientName] || 0) + order.totalValue;
             return acc;
         }, {});
-        
+
         const topClients = Object.entries(revenueByClient)
             .sort(([, a], [, b]) => b - a)
             .slice(0, 5)
             .map(([name, value]) => ({ name, value }));
-        
+
         setData({
             grossRevenue,
             topClients,
         });
-        
+
         setLoading(false);
     }
-    
+
     useEffect(() => {
         handleFilter();
     }, [orders]);
-    
+
     useEffect(() => {
         if (period !== 'custom') {
             setCustomStartDate('');
@@ -2332,7 +2405,7 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
                 <h1 className="text-3xl font-bold text-white">Dashboard Financeiro</h1>
                 <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Contas Correntes</Button>
             </div>
-            
+
             <div className="bg-neutral-900 p-4 rounded-2xl shadow-md flex flex-col md:flex-row flex-wrap items-end gap-4">
                 <div className="flex-1 min-w-[150px]">
                     <label htmlFor="period-select" className="block text-sm font-medium text-neutral-300 mb-1">Período Rápido</label>
@@ -2345,34 +2418,34 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
                 </div>
                 {period === 'custom' && (
                     <>
-                       <Input className="flex-1 min-w-[150px]" label="Data de Início" type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
-                       <Input className="flex-1 min-w-[150px]" label="Data de Fim" type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
+                        <Input className="flex-1 min-w-[150px]" label="Data de Início" type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
+                        <Input className="flex-1 min-w-[150px]" label="Data de Fim" type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
                     </>
                 )}
                 <div className="self-end">
-                   <Button onClick={handleFilter} className="h-11">Filtrar</Button>
+                    <Button onClick={handleFilter} className="h-11">Filtrar</Button>
                 </div>
             </div>
 
             {/* MODIFICAÇÃO: Layout para os cards de resumo */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <StatCard 
-                    icon={<LucideClipboardEdit size={40} className="text-purple-400" />} 
-                    label="Faturamento Bruto (Concluídas no período)" 
-                    value={`R$ ${data.grossRevenue.toFixed(2)}`} 
-                    color="border-purple-400" 
+                <StatCard
+                    icon={<LucideClipboardEdit size={40} className="text-purple-400" />}
+                    label="Faturamento Bruto (Concluídas no período)"
+                    value={`R$ ${data.grossRevenue.toFixed(2)}`}
+                    color="border-purple-400"
                 />
-                <StatCard 
-                    icon={<LucideDollarSign size={40} className="text-teal-400" />} 
-                    label="Valor Bruto Total em Carteira (Não canceladas)" 
-                    value={`R$ ${totalPortfolioValue.toFixed(2)}`} 
-                    color="border-teal-400" 
+                <StatCard
+                    icon={<LucideDollarSign size={40} className="text-teal-400" />}
+                    label="Valor Bruto Total em Carteira (Não canceladas)"
+                    value={`R$ ${totalPortfolioValue.toFixed(2)}`}
+                    color="border-teal-400"
                 />
             </div>
 
             <div className="bg-neutral-900 p-6 rounded-2xl shadow-md">
                 <h2 className="text-xl font-bold text-neutral-200 mb-4">Top 5 Clientes (por Faturamento no período)</h2>
-                 <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                         <Pie data={data.topClients} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={{ fill: '#F5F5F5' }}>
                             {data.topClients.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
@@ -2427,7 +2500,7 @@ const LoginScreen = () => {
                     role: 'user',
                     createdAt: serverTimestamp()
                 });
-                
+
                 await signOut(auth);
                 setMessage('Registo concluído! A sua conta está agora pendente de aprovação pelo administrador.');
 
@@ -2486,10 +2559,10 @@ const LoginScreen = () => {
                 </div>
 
                 {message && <p className="text-green-300 bg-green-900 bg-opacity-40 p-4 rounded-lg text-center">{message}</p>}
-                
+
                 <form onSubmit={isPasswordReset ? handlePasswordReset : handleAuth} className="space-y-6">
                     <Input label="Email" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                    
+
                     {!isPasswordReset && (
                         <Input label="Senha" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                     )}
@@ -2519,21 +2592,21 @@ const LoginScreen = () => {
                     ) : (
                         <span>{isLogin ? 'Não tem uma conta?' : 'Já tem uma conta?'} </span>
                     )}
-                    <button 
-                        onClick={() => toggleView(isLogin || isPasswordReset ? 'register' : 'login')} 
+                    <button
+                        onClick={() => toggleView(isLogin || isPasswordReset ? 'register' : 'login')}
                         className="font-medium text-yellow-500 hover:text-yellow-400"
                     >
                         {isLogin || isPasswordReset ? 'Cadastre-se' : 'Faça login'}
                     </button>
                     {isPasswordReset && (
                         <>
-                         <span className='mx-1'>|</span>
-                         <button 
-                             onClick={() => toggleView('login')} 
-                             className="font-medium text-yellow-500 hover:text-yellow-400"
-                         >
-                             Voltar para o Login
-                         </button>
+                            <span className='mx-1'>|</span>
+                            <button
+                                onClick={() => toggleView('login')}
+                                className="font-medium text-yellow-500 hover:text-yellow-400"
+                            >
+                                Voltar para o Login
+                            </button>
                         </>
                     )}
                 </div>
@@ -2798,12 +2871,12 @@ const AppLayout = ({ user, userProfile }) => {
                 return <PriceTables userId={user.uid} services={services} companyProfile={companyProfile} />;
             case 'service-orders':
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
-            
+
             case 'financials':
                 return <FinancialDashboard orders={serviceOrders} setActivePage={setActivePage} />;
             case 'financials-ledger':
-                 return <ClientAccounts userId={user.uid} clients={clients} orders={serviceOrders} setActivePage={setActivePage} />;
-            
+                return <ClientAccounts userId={user.uid} clients={clients} orders={serviceOrders} setActivePage={setActivePage} />;
+
             case 'reports':
                 return <Reports orders={serviceOrders} employees={employees} clients={clients} />;
             case 'user-management':
@@ -2825,8 +2898,8 @@ const AppLayout = ({ user, userProfile }) => {
                     href="#"
                     onClick={(e) => { e.preventDefault(); setActivePage(page); }}
                     className={`flex items-center p-3 text-base font-normal rounded-lg transition-all duration-200 ${isActive
-                            ? 'bg-yellow-500 text-black shadow-lg'
-                            : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'
+                        ? 'bg-yellow-500 text-black shadow-lg'
+                        : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'
                         }`}
                 >
                     {icon}
@@ -2840,9 +2913,9 @@ const AppLayout = ({ user, userProfile }) => {
         <div className="flex h-full text-white">
             <aside className="w-64 bg-neutral-900 shadow-lg flex-shrink-0 flex flex-col justify-between">
                 <div>
-                    <div className="flex items-center justify-center h-20 border-b border-neutral-800">
-                        <LucideClipboardEdit className="h-8 w-8 text-yellow-500" />
-                        <h1 className="text-xl font-bold text-white ml-2">{companyProfile?.companyName || 'Gestor Próteses'}</h1>
+                    <div className="flex items-center justify-center h-20 border-b border-neutral-800 px-4">
+                        <DentalIcon name={companyProfile?.companyIcon} />
+                        <h1 className="text-xl font-bold text-white ml-3 truncate">{companyProfile?.companyName || 'Gestor Próteses'}</h1>
                     </div>
                     <div className="p-4">
                         <ul className="space-y-2">
@@ -2915,9 +2988,9 @@ export default function App() {
     if (!isAuthReady) {
         return <Spinner />;
     }
-    
+
     const GlobalStyles = () => (
-      <style>{`
+        <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
         
         html, body, #root {
