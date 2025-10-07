@@ -145,8 +145,8 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
                                         <p className="text-sm text-neutral-400">Entrega em: {new Date(order.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
                                     </div>
                                     <span className={`px-3 py-1 text-sm font-medium rounded-full ${order.status === 'Pendente' ? 'bg-yellow-100 text-yellow-800' :
-                                            order.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
-                                                'bg-green-100 text-green-800'
+                                        order.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
+                                            'bg-green-100 text-green-800'
                                         }`}>{order.status}</span>
                                 </li>
                             ))}
@@ -371,6 +371,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     const [selectedMaterial, setSelectedMaterial] = useState('');
     const formRef = useRef({});
 
+    // <-- MODIFICAÇÃO 1: Adicionado estado para a porcentagem de desconto
+    const [discountPercentage, setDiscountPercentage] = useState(order?.discountPercentage || 0);
+
+
     useEffect(() => {
         const client = clients.find(c => c.id === selectedClientId);
         const priceTableId = client?.priceTableId;
@@ -399,8 +403,11 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         if (!order) { setSelectedServices([]); }
     }, [selectedClientId, clients, priceTables, services, order]);
 
+    // <-- MODIFICAÇÃO 2: Atualizado useEffect para calcular o total com desconto
     useEffect(() => {
-        const newTotal = selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0);
+        const subtotal = selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0);
+        const discountValue = (subtotal * (parseFloat(discountPercentage) || 0)) / 100;
+        const newTotal = subtotal - discountValue;
         setTotalValue(newTotal);
 
         const totalCommission = assignedEmployees.reduce((sum, emp) => {
@@ -409,7 +416,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         }, 0);
         setCommissionValue(totalCommission);
 
-    }, [selectedServices, assignedEmployees]);
+    }, [selectedServices, assignedEmployees, discountPercentage]); // <-- Adicionada dependência
 
     const handleAddEmployee = () => {
         if (!employeeToAdd || !commissionPercentageToAdd) {
@@ -469,6 +476,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         setEditingService(null);
     };
 
+    // <-- MODIFICAÇÃO 3: Atualizada função `handleSubmit` para salvar os dados de desconto
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!userId) return;
@@ -481,9 +489,13 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         }
 
         const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
-
         const finalServices = selectedServices.map(s => ({ ...s, quantity: Number(s.quantity) || 1, }));
-        const finalTotalValue = finalServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
+        
+        // Novos cálculos para salvar
+        const subtotal = finalServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
+        const finalDiscountPercentage = parseFloat(discountPercentage) || 0;
+        const discountAmount = (subtotal * finalDiscountPercentage) / 100;
+        const finalTotalValue = subtotal - discountAmount;
 
         const finalAssignedEmployees = assignedEmployees.map(emp => {
             const commission = finalTotalValue * (emp.commissionPercentage / 100);
@@ -498,7 +510,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         if (status === 'Concluído' && !completionDateValue) {
             completionDateValue = new Date().toISOString().split('T')[0];
         }
-        // Se o status deixar de ser 'Concluído', limpa a data de conclusão
         if (status !== 'Concluído') {
             completionDateValue = null;
         }
@@ -512,6 +523,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             completionDate: completionDateValue,
             status: status,
             services: finalServices,
+            // Novos campos salvos no banco
+            subtotal: subtotal,
+            discountPercentage: finalDiscountPercentage,
+            discountAmount: discountAmount,
             totalValue: finalTotalValue,
             commissionValue: totalCommissionValue,
             observations: formRef.current.observations.value,
@@ -526,14 +541,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             const transactionDescription = `Referente à O.S. - Paciente: ${orderData.patientName}`;
 
             if (order) {
-                // --- EDITANDO UMA O.S. EXISTENTE ---
                 const orderRef = doc(db, ordersCollectionRef.path, order.id);
                 batch.update(orderRef, orderData);
-
-                // Procura pelo débito existente desta O.S. para atualizá-lo
                 const q = query(transactionRef, where("orderId", "==", order.id), where("type", "==", "debit"));
                 const existingDebitSnapshot = await getDocs(q);
-
                 if (!existingDebitSnapshot.empty) {
                     const debitDoc = existingDebitSnapshot.docs[0];
                     batch.update(debitDoc.ref, { 
@@ -541,43 +552,30 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         description: `Referente à O.S. #${order.number} - Paciente: ${orderData.patientName}`
                     });
                 } else {
-                     // Caso o débito não exista por algum motivo, cria um novo
                      const newTransactionRef = doc(transactionRef);
                      batch.set(newTransactionRef, {
-                        clientId: orderData.clientId,
-                        clientName: orderData.clientName,
-                        type: 'debit',
-                        amount: finalTotalValue,
-                        date: orderData.openDate,
+                        clientId: orderData.clientId, clientName: orderData.clientName,
+                        type: 'debit', amount: finalTotalValue, date: orderData.openDate,
                         description: `Referente à O.S. #${order.number} - Paciente: ${orderData.patientName}`,
-                        orderId: order.id,
-                        createdAt: serverTimestamp()
+                        orderId: order.id, createdAt: serverTimestamp()
                     });
                 }
             } else {
-                // --- CRIANDO UMA NOVA O.S. ---
                 const newOrderRef = doc(ordersCollectionRef);
                 const newOrderNumber = lastOrderNumber + 1;
-                
                 orderData.number = newOrderNumber;
                 orderData.createdAt = serverTimestamp();
                 batch.set(newOrderRef, orderData);
-
-                // Cria o débito correspondente na conta do cliente
                 const newTransactionRef = doc(transactionRef);
                 batch.set(newTransactionRef, {
-                    clientId: orderData.clientId,
-                    clientName: orderData.clientName,
-                    type: 'debit',
-                    amount: finalTotalValue,
-                    date: orderData.openDate,
+                    clientId: orderData.clientId, clientName: orderData.clientName,
+                    type: 'debit', amount: finalTotalValue, date: orderData.openDate,
                     description: `Referente à O.S. #${newOrderNumber} - Paciente: ${orderData.patientName}`,
-                    orderId: newOrderRef.id, // Associa o débito ao ID da nova O.S.
-                    createdAt: serverTimestamp()
+                    orderId: newOrderRef.id, createdAt: serverTimestamp()
                 });
             }
             
-            await batch.commit(); // Executa todas as operações (salvar O.S. e transação)
+            await batch.commit();
             onClose();
 
         } catch (error) { 
@@ -586,11 +584,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         }
     };
 
-
     return (
         <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
             <form onSubmit={handleSubmit} className="space-y-6">
-                {/* --- DADOS GERAIS --- */}
+                {/* DADOS GERAIS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                     <div>
                         <label htmlFor="clientId" className="block text-sm font-medium text-neutral-300 mb-1">Cliente (Dentista/Clínica)</label>
@@ -603,7 +600,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate} required />
                     <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required />
                 </div>
-                {/* --- FUNCIONÁRIOS --- */}
+                {/* FUNCIONÁRIOS */}
                 <div className="p-4 border border-neutral-700 rounded-lg bg-neutral-800">
                     <h3 className="text-lg font-medium text-white mb-3">Funcionários Responsáveis</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end mb-3">
@@ -617,7 +614,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         <Input label="Comissão (%)" type="number" value={commissionPercentageToAdd} onChange={e => setCommissionPercentageToAdd(e.target.value)} placeholder="Ex: 20" />
                         <Button onClick={handleAddEmployee} variant="secondary" className="h-11">Adicionar Funcionário</Button>
                     </div>
-
                     <div className="space-y-2">
                         {assignedEmployees.map(emp => (
                             <div key={emp.id} className="flex justify-between items-center bg-neutral-900 p-2 rounded-md border border-neutral-700">
@@ -633,19 +629,16 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         {assignedEmployees.length === 0 && <p className="text-xs text-center text-neutral-500 py-2">Nenhum funcionário adicionado.</p>}
                     </div>
                 </div>
-
-
+                {/* SERVIÇOS */}
                 <div className="grid grid-cols-2 gap-6">
                     <div>
                         <h3 className="text-lg font-medium text-white mb-2">Serviços Disponíveis</h3>
                         {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-yellow-500 mb-2">A aplicar preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
-
                         <div className="space-y-3">
                             <select value={selectedMaterial} onChange={e => setSelectedMaterial(e.target.value)} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500">
                                 <option value="">Selecione um material...</option>
                                 {Object.keys(availableServices).sort().map(material => (<option key={material} value={material}>{material}</option>))}
                             </select>
-
                             {selectedMaterial && (
                                 <div className="max-h-48 overflow-y-auto p-2 bg-neutral-800 border border-neutral-700 rounded-lg space-y-1">
                                     {availableServices[selectedMaterial]?.map(service => (
@@ -659,7 +652,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                             )}
                         </div>
                     </div>
-
                     <div>
                         <h3 className="text-lg font-medium text-white mb-2">Serviços Selecionados</h3>
                         <div className="max-h-60 overflow-y-auto p-1 bg-neutral-900 border border-neutral-700 rounded-lg">
@@ -678,21 +670,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                             </div>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-neutral-400">
-                                            <span className="flex items-center gap-1 min-w-0">
-                                                <strong>D:</strong>
-                                                <span className="truncate">{service.toothNumber || '-'}</span>
-                                            </span>
-                                            <span className="flex items-center gap-1">
-                                                <strong>C:</strong>
-                                                <span>{service.color || '-'}</span>
-                                            </span>
-                                            <span className="flex items-center gap-1">
-                                                <strong>Q:</strong>
-                                                <span>{service.quantity || '1'}</span>
-                                            </span>
-                                            <span className="font-semibold text-white ml-auto">
-                                                R$ {((service.price || 0) * (Number(service.quantity) || 1)).toFixed(2)}
-                                            </span>
+                                            <span className="flex items-center gap-1 min-w-0"><strong>D:</strong><span className="truncate">{service.toothNumber || '-'}</span></span>
+                                            <span className="flex items-center gap-1"><strong>C:</strong><span>{service.color || '-'}</span></span>
+                                            <span className="flex items-center gap-1"><strong>Q:</strong><span>{service.quantity || '1'}</span></span>
+                                            <span className="font-semibold text-white ml-auto">R$ {((service.price || 0) * (Number(service.quantity) || 1)).toFixed(2)}</span>
                                         </div>
                                     </div>
                                 ))
@@ -700,7 +681,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                 <p className="text-xs text-center text-neutral-500 py-4">Nenhum serviço selecionado.</p>
                             )}
                         </div>
-
                         {editingService && (
                             <div className="mt-2 p-4 bg-neutral-800 border-t-2 border-yellow-500 rounded-lg">
                                 <h4 className="text-md font-bold text-yellow-500 mb-3">Editando: {editingService.data.name}</h4>
@@ -717,24 +697,40 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         )}
                     </div>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label htmlFor="status" className="block text-sm font-medium text-neutral-300 mb-1">Status</label>
                         <select id="status" ref={el => formRef.current.status = el} defaultValue={order?.status || 'Pendente'} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500" required>
-                            <option>Pendente</option>
-                            <option>Em Andamento</option>
-                            <option>Concluído</option>
-                            <option>Cancelado</option>
+                            <option>Pendente</option><option>Em Andamento</option><option>Concluído</option><option>Cancelado</option>
                         </select>
                     </div>
                     <Input label="Data de Conclusão" id="completionDate" type="date" ref={el => formRef.current.completionDate = el} defaultValue={order?.completionDate} />
                 </div>
+                
+                {/* <-- MODIFICAÇÃO 4: Adicionado campo de input para desconto */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-2">
+                    <Input 
+                        label="Desconto (%)" 
+                        id="discountPercentage" 
+                        type="number"
+                        value={discountPercentage}
+                        onChange={e => setDiscountPercentage(e.target.value)}
+                        placeholder="Ex: 5"
+                        min="0"
+                        step="0.1"
+                    />
+                </div>
+
                 <div>
                     <label htmlFor="observations" className="block text-sm font-medium text-neutral-300 mb-1">Observações</label>
                     <textarea id="observations" ref={el => formRef.current.observations = el} defaultValue={order?.observations} rows="3" className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500"></textarea>
                 </div>
+                
+                {/* <-- MODIFICAÇÃO 5: Atualizado resumo de totais para incluir subtotal e desconto */}
                 <div className="bg-neutral-800 p-4 rounded-lg text-right">
+                    <p className="text-sm text-neutral-400">Subtotal: <span className="font-semibold">R$ {selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0).toFixed(2)}</span></p>
+                    <p className="text-sm text-red-400">Desconto ({discountPercentage || 0}%): <span className="font-semibold">- R$ {((selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0) * (parseFloat(discountPercentage) || 0)) / 100).toFixed(2)}</span></p>
+                    <hr className="border-neutral-600 my-2" />
                     <p className="text-sm text-neutral-400">Comissão Total: <span className="font-semibold">R$ {commissionValue.toFixed(2)}</span></p>
                     <p className="text-xl font-bold text-yellow-500">Total O.S.: R$ {totalValue.toFixed(2)}</p>
                 </div>
@@ -776,12 +772,8 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         if (window.confirm('Tem certeza que deseja excluir esta ordem de serviço? Esta ação é permanente e também removerá o débito da conta do cliente.')) {
             try {
                 const batch = writeBatch(db);
-
-                // Deleta a O.S.
                 const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, id);
                 batch.delete(orderRef);
-                
-                // Encontra e deleta a transação de débito associada
                 const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
                 const q = query(transactionRef, where("orderId", "==", id), where("type", "==", "debit"));
                 const debitSnapshot = await getDocs(q);
@@ -789,9 +781,7 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                     const debitDoc = debitSnapshot.docs[0];
                     batch.delete(debitDoc.ref);
                 }
-
                 await batch.commit();
-
             } catch (error) {
                 console.error("Error deleting service order and transaction: ", error);
             }
@@ -808,61 +798,49 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         const elementsToHide = input.querySelectorAll('.hide-on-print');
         elementsToHide.forEach(el => el.style.visibility = 'hidden');
 
-        html2canvas(input, {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: '#ffffff'
-        }).then(canvas => {
-            elementsToHide.forEach(el => el.style.visibility = 'visible');
-
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-
-            const MARGIN = 15;
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const usableWidth = pdfWidth - (MARGIN * 2);
-            const usableHeight = pdfHeight - (MARGIN * 2);
-
-            const aspectRatio = canvas.height / canvas.width;
-            const scaledImgHeight = usableWidth * aspectRatio;
-
-            let heightLeft = scaledImgHeight;
-            let position = 0;
-
-            pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledImgHeight);
-            heightLeft -= usableHeight;
-
-            while (heightLeft > 0) {
-                position -= usableHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledImgHeight);
+        html2canvas(input, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
+            .then(canvas => {
+                elementsToHide.forEach(el => el.style.visibility = 'visible');
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const MARGIN = 15;
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                const usableWidth = pdfWidth - (MARGIN * 2);
+                const usableHeight = pdfHeight - (MARGIN * 2);
+                const aspectRatio = canvas.height / canvas.width;
+                const scaledImgHeight = usableWidth * aspectRatio;
+                let heightLeft = scaledImgHeight;
+                let position = 0;
+                pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, usableWidth, scaledImgHeight);
                 heightLeft -= usableHeight;
-            }
-
-            if (action === 'print') {
-                pdf.autoPrint();
-                window.open(pdf.output('bloburl'), '_blank');
-            } else {
-                pdf.save(`OS_${currentOrder.number}.pdf`);
-            }
-        }).catch(err => {
-            elementsToHide.forEach(el => el.style.visibility = 'visible');
-            console.error("Error generating PDF:", err);
-            alert("Ocorreu um erro ao gerar o PDF.");
-        });
+                while (heightLeft > 0) {
+                    position -= usableHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledImgHeight);
+                    heightLeft -= usableHeight;
+                }
+                if (action === 'print') {
+                    pdf.autoPrint();
+                    window.open(pdf.output('bloburl'), '_blank');
+                } else {
+                    pdf.save(`OS_${currentOrder.number}.pdf`);
+                }
+            }).catch(err => {
+                elementsToHide.forEach(el => el.style.visibility = 'visible');
+                console.error("Error generating PDF:", err);
+                alert("Ocorreu um erro ao gerar o PDF.");
+            });
     };
 
     const handlePrint = () => generatePdf('print');
     const handleSaveAsPdf = () => generatePdf('save');
 
-    // MODIFICAÇÃO 1: Função de mudança de status simplificada
     const handleStatusChange = async (orderId, newStatus) => {
         if (!userId) return;
         const orderRef = doc(db, `artifacts/${appId}/users/${userId}/serviceOrders`, orderId);
         try {
             const updateData = { status: newStatus };
-    
             if (newStatus === 'Concluído') {
                 const order = orders.find(o => o.id === orderId);
                 if (!order.completionDate) {
@@ -871,7 +849,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             } else {
                 updateData.completionDate = null;
             }
-    
             if (newStatus === 'Cancelado') {
                  if (window.confirm('Cancelar uma O.S. por aqui apenas muda o status. Para estornar o valor da conta do cliente, vá até Financeiro > Contas Correntes. Deseja continuar?')) {
                      await updateDoc(orderRef, updateData);
@@ -882,68 +859,50 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             } else {
                  await updateDoc(orderRef, updateData);
             }
-            
         } catch (error) {
             console.error("Error updating status: ", error);
             alert("Ocorreu um erro ao atualizar o status da O.S.");
         }
     };
 
-    // MODIFICAÇÃO 2: Função para criar débitos faltantes em dados antigos
     const createMissingDebits = async () => {
         if (!userId) {
             alert("Utilizador não encontrado.");
             return;
         }
-
         console.log("Iniciando a verificação de débitos em falta...");
         alert("Iniciando a verificação. Este processo pode demorar um pouco. Aguarde o alerta de conclusão.");
-
         try {
             const batch = writeBatch(db);
-
             const ordersRef = collection(db, `artifacts/${appId}/users/${userId}/serviceOrders`);
             const ordersSnapshot = await getDocs(ordersRef);
             const allOrders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
             const transactionsRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
             const q = query(transactionsRef, where("type", "==", "debit"));
             const transactionsSnapshot = await getDocs(q);
-
             const ordersWithDebit = new Set(transactionsSnapshot.docs.map(doc => doc.data().orderId));
-            
             let debitsCreatedCount = 0;
-
             allOrders.forEach(order => {
                 if (!ordersWithDebit.has(order.id)) {
                     console.log(`Débito em falta encontrado para O.S. #${order.number}. Adicionando à correção.`);
-                    
                     const newTransactionRef = doc(transactionsRef);
-                    
                     batch.set(newTransactionRef, {
-                        clientId: order.clientId,
-                        clientName: order.clientName,
-                        type: 'debit',
-                        amount: order.totalValue,
-                        date: order.openDate,
+                        clientId: order.clientId, clientName: order.clientName, type: 'debit',
+                        amount: order.totalValue, date: order.openDate,
                         description: `Referente à O.S. #${order.number} - Paciente: ${order.patientName}`,
-                        orderId: order.id,
-                        createdAt: serverTimestamp()
+                        orderId: order.id, createdAt: serverTimestamp()
                     });
                     debitsCreatedCount++;
                 }
             });
-
             if (debitsCreatedCount > 0) {
                 await batch.commit();
                 alert(`${debitsCreatedCount} débito(s) em falta foram criados com sucesso! O seu painel de Contas de Cliente agora está atualizado.`);
             } else {
                 alert("Nenhum débito em falta foi encontrado. Os seus dados já estão corretos.");
             }
-            
             console.log("Verificação concluída.");
             window.location.reload();
-
         } catch (error) {
             console.error("Erro ao criar débitos em falta: ", error);
             alert("Ocorreu um erro grave ao tentar corrigir os dados. Verifique o console para mais detalhes.");
@@ -963,13 +922,11 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
     const filteredOrders = orders.filter(order => {
         const matchesFilter = filter === 'Todos' || order.status === filter;
         const lowerCaseSearchTerm = searchTerm.toLowerCase();
-        
         const matchesSearch = searchTerm === '' ||
             String(order.number) === searchTerm.trim() ||
             order.clientName.toLowerCase().includes(lowerCaseSearchTerm) ||
             order.patientName.toLowerCase().includes(lowerCaseSearchTerm) ||
             (order.employeeName && order.employeeName.toLowerCase().includes(lowerCaseSearchTerm));
-            
         return matchesFilter && matchesSearch;
     });
 
@@ -978,36 +935,15 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             <header className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <h1 className="text-3xl font-bold text-white">Ordens de Serviço</h1>
                 <div className="w-full md:w-auto flex flex-col md:flex-row items-center gap-2">
-                    {/* MODIFICAÇÃO 2: Botão temporário para corrigir os dados */}
-                    <Button onClick={createMissingDebits} variant="danger" className="w-full md:w-auto">
-                        Corrigir Débitos Antigos
-                    </Button>
-
+                    <Button onClick={createMissingDebits} variant="danger" className="w-full md:w-auto">Corrigir Débitos Antigos</Button>
                     <div className="relative w-full md:w-64">
                         <LucideSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={20} />
-                        <Input
-                            type="text"
-                            placeholder="Buscar por Nº O.S., Cliente..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10"
-                        />
+                        <Input type="text" placeholder="Buscar por Nº O.S., Cliente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
                     </div>
-                    <select
-                        value={filter}
-                        onChange={(e) => setFilter(e.target.value)}
-                        className="w-full md:w-auto bg-neutral-800 border border-neutral-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-yellow-500 text-white"
-                    >
-                        <option>Todos</option>
-                        <option>Pendente</option>
-                        <option>Em Andamento</option>
-                        <option>Concluído</option>
-                        <option>Cancelado</option>
+                    <select value={filter} onChange={(e) => setFilter(e.target.value)} className="w-full md:w-auto bg-neutral-800 border border-neutral-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-yellow-500 text-white">
+                        <option>Todos</option><option>Pendente</option><option>Em Andamento</option><option>Concluído</option><option>Cancelado</option>
                     </select>
-                    <Button onClick={() => handleOpenModal()} className="w-full md:w-auto">
-                        <LucidePlusCircle size={20} />
-                        Nova O.S.
-                    </Button>
+                    <Button onClick={() => handleOpenModal()} className="w-full md:w-auto"><LucidePlusCircle size={20} />Nova O.S.</Button>
                 </div>
             </header>
 
@@ -1016,34 +952,20 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                     <table className="w-full text-sm text-left text-neutral-400">
                         <thead className="text-xs text-neutral-300 uppercase bg-neutral-800">
                             <tr>
-                                <th scope="col" className="px-6 py-3">Nº O.S.</th>
-                                <th scope="col" className="px-6 py-3">Cliente</th>
-                                <th scope="col" className="px-6 py-3">Paciente</th>
-                                <th scope="col" className="px-6 py-3">Responsável(eis)</th>
-                                <th scope="col" className="px-6 py-3">Data Entrega</th>
-                                <th scope="col" className="px-6 py-3">Status</th>
+                                <th scope="col" className="px-6 py-3">Nº O.S.</th><th scope="col" className="px-6 py-3">Cliente</th><th scope="col" className="px-6 py-3">Paciente</th>
+                                <th scope="col" className="px-6 py-3">Responsável(eis)</th><th scope="col" className="px-6 py-3">Data Entrega</th><th scope="col" className="px-6 py-3">Status</th>
                                 <th scope="col" className="px-6 py-3 text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredOrders.map(order => (
                                 <tr key={order.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-neutral-800">
-                                    <td className="px-6 py-4 font-medium text-white">#{order.number}</td>
-                                    <td className="px-6 py-4">{order.clientName}</td>
-                                    <td className="px-6 py-4">{order.patientName}</td>
-                                    <td className="px-6 py-4">{order.employeeName}</td>
+                                    <td className="px-6 py-4 font-medium text-white">#{order.number}</td><td className="px-6 py-4">{order.clientName}</td>
+                                    <td className="px-6 py-4">{order.patientName}</td><td className="px-6 py-4">{order.employeeName}</td>
                                     <td className="px-6 py-4">{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'N/A'}</td>
                                     <td className="px-6 py-4">
-                                        <select
-                                            value={order.status}
-                                            onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                                            className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs border-none appearance-none focus:ring-0 cursor-pointer ${getStatusClasses(order.status)}`}
-                                            style={{ WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}
-                                        >
-                                            <option value="Pendente">Pendente</option>
-                                            <option value="Em Andamento">Em Andamento</option>
-                                            <option value="Concluído">Concluído</option>
-                                            <option value="Cancelado">Cancelado</option>
+                                        <select value={order.status} onChange={(e) => handleStatusChange(order.id, e.target.value)} className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs border-none appearance-none focus:ring-0 cursor-pointer ${getStatusClasses(order.status)}`} style={{ WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}>
+                                            <option value="Pendente">Pendente</option><option value="Em Andamento">Em Andamento</option><option value="Concluído">Concluído</option><option value="Cancelado">Cancelado</option>
                                         </select>
                                     </td>
                                     <td className="px-6 py-4 text-center">
@@ -1072,10 +994,8 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                         <div className="grid grid-cols-2 gap-6 mb-6">
                             <div>
                                 <h3 className="font-bold mb-2 border-b">Cliente</h3>
-                                <p><strong>Nome:</strong> {currentOrder.client.name}</p>
-                                <p><strong>Paciente:</strong> {currentOrder.patientName}</p>
-                                <p><strong>Telefone:</strong> {currentOrder.client.phone}</p>
-                                <p><strong>Endereço:</strong> {currentOrder.client.address}</p>
+                                <p><strong>Nome:</strong> {currentOrder.client.name}</p><p><strong>Paciente:</strong> {currentOrder.patientName}</p>
+                                <p><strong>Telefone:</strong> {currentOrder.client.phone}</p><p><strong>Endereço:</strong> {currentOrder.client.address}</p>
                             </div>
                             <div>
                                 <h3 className="font-bold mb-2 border-b">Datas</h3>
@@ -1089,45 +1009,43 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                 {currentOrder.assignedEmployees?.map(emp => (
                                     <div key={emp.id} className="flex justify-between items-center">
                                         <span>{emp.name}</span>
-                                        <span>
-                                            {emp.commissionPercentage}% - <strong>R$ {(emp.commissionValue || 0).toFixed(2)}</strong>
-                                        </span>
+                                        <span>{emp.commissionPercentage}% - <strong>R$ {(emp.commissionValue || 0).toFixed(2)}</strong></span>
                                     </div>
                                 ))}
                             </div>
                         </div>
-
                         <h3 className="font-bold mb-2 border-b">Serviços Solicitados</h3>
                         <table className="w-full text-left mb-6">
                             <thead className="bg-neutral-100">
                                 <tr>
-                                    <th className="p-2">Serviço</th>
-                                    <th className="p-2">Dente</th>
-                                    <th className="p-2">Cor</th>
-                                    <th className="p-2 text-center">Qtd</th>
-                                    <th className="p-2 text-right">Subtotal</th>
+                                    <th className="p-2">Serviço</th><th className="p-2">Dente</th><th className="p-2">Cor</th>
+                                    <th className="p-2 text-center">Qtd</th><th className="p-2 text-right">Subtotal</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {currentOrder.services.map((service, index) => (
                                     <tr key={index} className="border-b">
-                                        <td className="p-2">{service.name}</td>
-                                        <td className="p-2">{service.toothNumber || '-'}</td>
-                                        <td className="p-2">{service.color || '-'}</td>
-                                        <td className="p-2 text-center">{service.quantity || 1}</td>
+                                        <td className="p-2">{service.name}</td><td className="p-2">{service.toothNumber || '-'}</td>
+                                        <td className="p-2">{service.color || '-'}</td><td className="p-2 text-center">{service.quantity || 1}</td>
                                         <td className="p-2 text-right">R$ {(service.price * (service.quantity || 1)).toFixed(2)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
-
                         <div className="grid grid-cols-2 gap-6 mb-6">
                             <div>
                                 <h3 className="font-bold mb-2 border-b">Observações</h3>
                                 <p className="text-sm italic">{currentOrder.observations || 'Nenhuma observação.'}</p>
                             </div>
+                            {/* <-- MODIFICAÇÃO: Atualizado bloco de totais para exibir subtotal e desconto, se houver */}
                             <div className="text-right">
                                 <p className="hide-on-print"><strong>Comissão Total:</strong> R$ {(currentOrder.commissionValue || 0).toFixed(2)}</p>
+                                {currentOrder.discountPercentage > 0 && (
+                                    <>
+                                        <p><strong>Subtotal:</strong> R$ {(currentOrder.subtotal || 0).toFixed(2)}</p>
+                                        <p className="text-red-600"><strong>Desconto ({currentOrder.discountPercentage}%):</strong> - R$ {(currentOrder.discountAmount || 0).toFixed(2)}</p>
+                                    </>
+                                )}
                                 <p className="text-lg font-bold"><strong>Valor Total:</strong> R$ {currentOrder.totalValue.toFixed(2)}</p>
                                 <p className="font-bold mt-2"><strong>Status:</strong> {currentOrder.status}</p>
                             </div>
@@ -1157,7 +1075,7 @@ const Reports = ({ orders, employees, clients }) => {
         commissionsByEmployee: 'Relatório de Comissões por Funcionário',
         ordersByClient: 'Relatório de Ordens por Cliente'
     };
-    
+
     const handleGenerateReport = () => {
         const parseLocalDate = (dateString) => {
             if (!dateString) return null;
@@ -1167,7 +1085,7 @@ const Reports = ({ orders, employees, clients }) => {
 
         const start = parseLocalDate(startDate);
         const end = parseLocalDate(endDate);
-        
+
         if (end) {
             end.setHours(23, 59, 59, 999);
         }
@@ -1177,7 +1095,7 @@ const Reports = ({ orders, employees, clients }) => {
             data = orders.filter(o => {
                 const completed = o.status === 'Concluído' && o.completionDate;
                 if (!completed) return false;
-                
+
                 const completionDate = parseLocalDate(o.completionDate);
                 if (!completionDate) return false;
 
@@ -1198,7 +1116,7 @@ const Reports = ({ orders, employees, clients }) => {
 
                 const completionDate = parseLocalDate(o.completionDate);
                 if (!completionDate) return false;
-                
+
                 if (start && completionDate < start) return false;
                 if (end && completionDate > end) return false;
                 return true;
@@ -1215,8 +1133,8 @@ const Reports = ({ orders, employees, clients }) => {
                 if (end && completionDate > end) return false;
                 return true;
             });
-            
-            data = filteredOrders.flatMap(order => 
+
+            data = filteredOrders.flatMap(order =>
                 order.services.map(service => ({
                     ...service,
                     orderId: order.id,
@@ -1280,7 +1198,7 @@ const Reports = ({ orders, employees, clients }) => {
 
     const handlePrintReport = () => generateReportPdf('print');
     const handleSaveReportAsPdf = () => generateReportPdf('save');
-    
+
     const totalCommission = reportType === 'commissionsByEmployee'
         ? results.reduce((sum, order) => {
             const employeeCommission = order.assignedEmployees?.find(emp => emp.id === selectedEmployee)?.commissionValue || 0;
@@ -1291,7 +1209,7 @@ const Reports = ({ orders, employees, clients }) => {
     const totalValue = reportType === 'ordersByClient'
         ? results.reduce((sum, service) => sum + (service.subtotal || 0), 0)
         : results.reduce((sum, order) => sum + (order.totalValue || 0), 0);
-    
+
     const getReportSubTitle = () => {
         let period = '';
         if (startDate && endDate) {
@@ -1527,7 +1445,7 @@ const PriceTableViewModal = ({ table, allServices, companyProfile, onClose }) =>
         acc[material].push(service);
         return acc;
     }, {});
-    
+
     const generatePdf = (action = 'print') => {
         const input = printRef.current;
         if (!input) {
@@ -1789,8 +1707,8 @@ const UserManagement = ({ userId }) => {
                                 <td className="px-6 py-4">{user.createdAt?.toDate().toLocaleDateString('pt-BR') || 'N/A'}</td>
                                 <td className="px-6 py-4">
                                     <span className={`px-3 py-1 text-sm font-medium rounded-full ${user.status === 'approved' ? 'bg-green-100 text-green-800' :
-                                            user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                                'bg-red-100 text-red-800'
+                                        user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                            'bg-red-100 text-red-800'
                                         }`}>{user.status === 'approved' ? 'Aprovado' : 'Pendente'}</span>
                                 </td>
                                 <td className="px-6 py-4 text-center">
@@ -1841,7 +1759,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                 const totalDebit = clientTransactions
                     .filter(t => t.type === 'debit')
                     .reduce((sum, t) => sum + t.amount, 0);
-                
+
                 return {
                     ...client,
                     balance: totalCredit - totalDebit
@@ -1863,7 +1781,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
 
         const transactionsRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
         const q = query(transactionsRef, where("clientId", "==", selectedClient.id), orderBy("date", "desc"), orderBy("createdAt", "desc"));
-        
+
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const clientTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setTransactions(clientTransactions);
@@ -1871,12 +1789,12 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
 
         return () => unsubscribe();
     }, [selectedClient, userId]);
-    
+
     const clientOrders = useMemo(() => {
         if (!selectedClient) return [];
         return orders.filter(o => o.clientId === selectedClient.id).sort((a, b) => b.number - a.number);
     }, [selectedClient, orders]);
-    
+
     const handleSelectClient = (client) => {
         setSelectedClient(client);
         setActiveTab('extrato');
@@ -1884,7 +1802,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
 
     const handleSaveCredit = async ({ amount, date, description }) => {
         if (!userId || !selectedClient || !amount || !date) return;
-        
+
         try {
             const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
             await addDoc(transactionRef, {
@@ -1929,12 +1847,12 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                 const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
                 const q = query(transactionRef, where("orderId", "==", order.id), where("type", "==", "debit"));
                 const debitSnapshot = await getDocs(q);
-                
+
                 if (!debitSnapshot.empty) {
                     const debitDoc = debitSnapshot.docs[0];
                     batch.delete(debitDoc.ref);
                 }
-                
+
                 await batch.commit();
                 alert(`O.S. #${order.number} cancelada e débito estornado.`);
 
@@ -1981,7 +1899,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                 pdf.addImage(imgData, 'PNG', MARGIN, position + MARGIN, usableWidth, scaledImgHeight);
                 heightLeft -= usableHeight;
             }
-            
+
             if (action === 'print') {
                 pdf.autoPrint();
                 window.open(pdf.output('bloburl'), '_blank');
@@ -1993,7 +1911,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
             alert("Ocorreu um erro ao gerar o PDF.");
         });
     };
-    
+
     if (loading) return <Spinner />;
 
     return (
@@ -2008,7 +1926,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                 <div className="space-y-2 max-h-[75vh] overflow-y-auto">
                     {accounts.map(acc => (
                         <div key={acc.id} onClick={() => handleSelectClient(acc)}
-                             className={`p-3 rounded-lg cursor-pointer transition-colors border ${selectedClient?.id === acc.id ? 'bg-yellow-900 border-yellow-600' : 'bg-neutral-800 border-neutral-700 hover:bg-neutral-700'}`}>
+                            className={`p-3 rounded-lg cursor-pointer transition-colors border ${selectedClient?.id === acc.id ? 'bg-yellow-900 border-yellow-600' : 'bg-neutral-800 border-neutral-700 hover:bg-neutral-700'}`}>
                             <div className="flex justify-between items-center">
                                 <span className="font-semibold text-white">{acc.name}</span>
                                 <span className={`font-bold text-lg ${acc.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -2030,11 +1948,11 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                 <p className="text-neutral-300">Detalhes da Conta</p>
                             </div>
                             <div className="flex gap-2">
-                                 <Button onClick={() => generateClientPdf('save')} variant="secondary"><LucideFileDown size={18} /> Salvar PDF</Button>
-                                 <Button onClick={() => generateClientPdf('print')}><LucidePrinter size={18} /> Imprimir</Button>
+                                <Button onClick={() => generateClientPdf('save')} variant="secondary"><LucideFileDown size={18} /> Salvar PDF</Button>
+                                <Button onClick={() => generateClientPdf('print')}><LucidePrinter size={18} /> Imprimir</Button>
                             </div>
                         </header>
-                        
+
                         <div className="flex border-b border-neutral-700 mb-4">
                             <button onClick={() => setActiveTab('extrato')} className={`py-2 px-4 text-sm font-medium ${activeTab === 'extrato' ? 'border-b-2 border-yellow-500 text-yellow-500' : 'text-neutral-400 hover:text-white'}`}>
                                 Extrato da Conta
@@ -2045,12 +1963,12 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                         </div>
 
                         {activeTab === 'extrato' && (
-                           <div>
+                            <div>
                                 <div className="flex justify-end mb-4">
-                                     <Button onClick={() => setCreditModalOpen(true)}>
-                                         <LucidePlusCircle size={20} />
-                                         Lançar Pagamento (Crédito)
-                                     </Button>
+                                    <Button onClick={() => setCreditModalOpen(true)}>
+                                        <LucidePlusCircle size={20} />
+                                        Lançar Pagamento (Crédito)
+                                    </Button>
                                 </div>
                                 <div className="max-h-[60vh] overflow-y-auto">
                                     <div ref={printRef} className="p-4 bg-white text-neutral-800 rounded">
@@ -2079,8 +1997,8 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                                         </td>
                                                         <td className="px-6 py-4 text-center">
                                                             {t.type === 'credit' && (
-                                                                <button 
-                                                                    onClick={() => handleDeleteTransaction(t.id)} 
+                                                                <button
+                                                                    onClick={() => handleDeleteTransaction(t.id)}
                                                                     className="p-1 text-red-600 hover:text-red-800"
                                                                     title="Excluir Lançamento de Crédito">
                                                                     <LucideTrash2 size={16} />
@@ -2106,9 +2024,9 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                 </div>
                             </div>
                         )}
-                        
+
                         {activeTab === 'os' && (
-                             <div className="max-h-[60vh] overflow-y-auto">
+                            <div className="max-h-[60vh] overflow-y-auto">
                                 <table className="w-full text-sm text-left text-neutral-400">
                                     <thead className="text-xs text-neutral-300 uppercase bg-neutral-800 sticky top-0">
                                         <tr>
@@ -2137,7 +2055,7 @@ const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
                                                 </td>
                                             </tr>
                                         ))}
-                                         {clientOrders.length === 0 && (
+                                        {clientOrders.length === 0 && (
                                             <tr><td colSpan="6" className="text-center p-8 text-neutral-500">Nenhuma O.S. encontrada para este cliente.</td></tr>
                                         )}
                                     </tbody>
@@ -2285,36 +2203,36 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
 
         startDate.setHours(0, 0, 0, 0);
         endDate.setHours(23, 59, 59, 999);
-        
+
         const completedOrdersInPeriod = orders.filter(o => {
             const completionDate = new Date(o.completionDate);
             return o.status === 'Concluído' && completionDate >= startDate && completionDate <= endDate;
         });
-        
+
         const grossRevenue = completedOrdersInPeriod.reduce((sum, o) => sum + o.totalValue, 0);
 
         const revenueByClient = completedOrdersInPeriod.reduce((acc, order) => {
             acc[order.clientName] = (acc[order.clientName] || 0) + order.totalValue;
             return acc;
         }, {});
-        
+
         const topClients = Object.entries(revenueByClient)
             .sort(([, a], [, b]) => b - a)
             .slice(0, 5)
             .map(([name, value]) => ({ name, value }));
-        
+
         setData({
             grossRevenue,
             topClients,
         });
-        
+
         setLoading(false);
     }
-    
+
     useEffect(() => {
         handleFilter();
     }, [orders]);
-    
+
     useEffect(() => {
         if (period !== 'custom') {
             setCustomStartDate('');
@@ -2332,7 +2250,7 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
                 <h1 className="text-3xl font-bold text-white">Dashboard Financeiro</h1>
                 <Button onClick={() => setActivePage('financials-ledger')} variant="secondary">Ver Contas Correntes</Button>
             </div>
-            
+
             <div className="bg-neutral-900 p-4 rounded-2xl shadow-md flex flex-col md:flex-row flex-wrap items-end gap-4">
                 <div className="flex-1 min-w-[150px]">
                     <label htmlFor="period-select" className="block text-sm font-medium text-neutral-300 mb-1">Período Rápido</label>
@@ -2345,34 +2263,34 @@ const FinancialDashboard = ({ orders, setActivePage }) => {
                 </div>
                 {period === 'custom' && (
                     <>
-                       <Input className="flex-1 min-w-[150px]" label="Data de Início" type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
-                       <Input className="flex-1 min-w-[150px]" label="Data de Fim" type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
+                        <Input className="flex-1 min-w-[150px]" label="Data de Início" type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
+                        <Input className="flex-1 min-w-[150px]" label="Data de Fim" type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
                     </>
                 )}
                 <div className="self-end">
-                   <Button onClick={handleFilter} className="h-11">Filtrar</Button>
+                    <Button onClick={handleFilter} className="h-11">Filtrar</Button>
                 </div>
             </div>
 
             {/* MODIFICAÇÃO: Layout para os cards de resumo */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <StatCard 
-                    icon={<LucideClipboardEdit size={40} className="text-purple-400" />} 
-                    label="Faturamento Bruto (Concluídas no período)" 
-                    value={`R$ ${data.grossRevenue.toFixed(2)}`} 
-                    color="border-purple-400" 
+                <StatCard
+                    icon={<LucideClipboardEdit size={40} className="text-purple-400" />}
+                    label="Faturamento Bruto (Concluídas no período)"
+                    value={`R$ ${data.grossRevenue.toFixed(2)}`}
+                    color="border-purple-400"
                 />
-                <StatCard 
-                    icon={<LucideDollarSign size={40} className="text-teal-400" />} 
-                    label="Valor Bruto Total em Carteira (Não canceladas)" 
-                    value={`R$ ${totalPortfolioValue.toFixed(2)}`} 
-                    color="border-teal-400" 
+                <StatCard
+                    icon={<LucideDollarSign size={40} className="text-teal-400" />}
+                    label="Valor Bruto Total em Carteira (Não canceladas)"
+                    value={`R$ ${totalPortfolioValue.toFixed(2)}`}
+                    color="border-teal-400"
                 />
             </div>
 
             <div className="bg-neutral-900 p-6 rounded-2xl shadow-md">
                 <h2 className="text-xl font-bold text-neutral-200 mb-4">Top 5 Clientes (por Faturamento no período)</h2>
-                 <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                         <Pie data={data.topClients} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={{ fill: '#F5F5F5' }}>
                             {data.topClients.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
@@ -2427,7 +2345,7 @@ const LoginScreen = () => {
                     role: 'user',
                     createdAt: serverTimestamp()
                 });
-                
+
                 await signOut(auth);
                 setMessage('Registo concluído! A sua conta está agora pendente de aprovação pelo administrador.');
 
@@ -2486,10 +2404,10 @@ const LoginScreen = () => {
                 </div>
 
                 {message && <p className="text-green-300 bg-green-900 bg-opacity-40 p-4 rounded-lg text-center">{message}</p>}
-                
+
                 <form onSubmit={isPasswordReset ? handlePasswordReset : handleAuth} className="space-y-6">
                     <Input label="Email" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                    
+
                     {!isPasswordReset && (
                         <Input label="Senha" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                     )}
@@ -2519,21 +2437,21 @@ const LoginScreen = () => {
                     ) : (
                         <span>{isLogin ? 'Não tem uma conta?' : 'Já tem uma conta?'} </span>
                     )}
-                    <button 
-                        onClick={() => toggleView(isLogin || isPasswordReset ? 'register' : 'login')} 
+                    <button
+                        onClick={() => toggleView(isLogin || isPasswordReset ? 'register' : 'login')}
                         className="font-medium text-yellow-500 hover:text-yellow-400"
                     >
                         {isLogin || isPasswordReset ? 'Cadastre-se' : 'Faça login'}
                     </button>
                     {isPasswordReset && (
                         <>
-                         <span className='mx-1'>|</span>
-                         <button 
-                             onClick={() => toggleView('login')} 
-                             className="font-medium text-yellow-500 hover:text-yellow-400"
-                         >
-                             Voltar para o Login
-                         </button>
+                            <span className='mx-1'>|</span>
+                            <button
+                                onClick={() => toggleView('login')}
+                                className="font-medium text-yellow-500 hover:text-yellow-400"
+                            >
+                                Voltar para o Login
+                            </button>
                         </>
                     )}
                 </div>
@@ -2798,12 +2716,12 @@ const AppLayout = ({ user, userProfile }) => {
                 return <PriceTables userId={user.uid} services={services} companyProfile={companyProfile} />;
             case 'service-orders':
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
-            
+
             case 'financials':
                 return <FinancialDashboard orders={serviceOrders} setActivePage={setActivePage} />;
             case 'financials-ledger':
-                 return <ClientAccounts userId={user.uid} clients={clients} orders={serviceOrders} setActivePage={setActivePage} />;
-            
+                return <ClientAccounts userId={user.uid} clients={clients} orders={serviceOrders} setActivePage={setActivePage} />;
+
             case 'reports':
                 return <Reports orders={serviceOrders} employees={employees} clients={clients} />;
             case 'user-management':
@@ -2825,8 +2743,8 @@ const AppLayout = ({ user, userProfile }) => {
                     href="#"
                     onClick={(e) => { e.preventDefault(); setActivePage(page); }}
                     className={`flex items-center p-3 text-base font-normal rounded-lg transition-all duration-200 ${isActive
-                            ? 'bg-yellow-500 text-black shadow-lg'
-                            : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'
+                        ? 'bg-yellow-500 text-black shadow-lg'
+                        : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'
                         }`}
                 >
                     {icon}
@@ -2915,9 +2833,9 @@ export default function App() {
     if (!isAuthReady) {
         return <Spinner />;
     }
-    
+
     const GlobalStyles = () => (
-      <style>{`
+        <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
         
         html, body, #root {
