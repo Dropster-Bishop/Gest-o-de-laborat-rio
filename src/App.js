@@ -214,7 +214,7 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
         fields.forEach(field => {
             const inputElement = formRef.current[field.name];
             if (inputElement) {
-                if (inputElement.type === 'textarea' || inputElement.type === 'select-one') {
+                if (inputElement.type === 'textarea') {
                     formData[field.name] = inputElement.value;
                 } else {
                     formData[field.name] = inputElement.value;
@@ -314,8 +314,9 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                                             defaultValue={currentItem ? currentItem[field.name] : ''}
                                             className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500 text-white"
                                         >
-                                           {field.options.map(option => (
-                                                <option key={option.value} value={option.value}>{option.label}</option>
+                                            <option value="">{field.placeholder}</option>
+                                            {customProps[field.optionsKey]?.map(option => (
+                                                <option key={option.id} value={option.id}>{option.name}</option>
                                             ))}
                                         </select>
                                     </div>
