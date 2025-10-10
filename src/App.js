@@ -178,7 +178,8 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
     );
 };
 
-const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps = {} }) => {
+// ATENÇÃO: Substitua este componente inteiro
+const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps = {}, onAddItem }) => {
     const [items, setItems] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentItem, setCurrentItem] = useState(null);
@@ -272,7 +273,9 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                             className="pl-10"
                         />
                     </div>
-                    <Button onClick={() => handleOpenModal()}>
+                    {/* --- CORREÇÃO DO BOTÃO ADICIONAR --- */}
+                    {/* O botão agora usa a função 'onAddItem' se ela for fornecida, caso contrário, usa a função padrão */}
+                    <Button onClick={onAddItem ? onAddItem : () => handleOpenModal()}>
                         <LucidePlusCircle size={20} />
                         Adicionar
                     </Button>
@@ -285,7 +288,7 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                 </div>
             </div>
 
-            {isModalOpen && (
+            {isModalOpen && !onAddItem && ( // O modal genérico só abre se não houver uma função customizada
                 <Modal onClose={handleCloseModal} title={currentItem ? `Editar ${title.slice(0, -1)}` : `Adicionar ${title.slice(0, -1)}`}>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {fields.map(field => {
@@ -314,13 +317,9 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                                             defaultValue={currentItem ? currentItem[field.name] : ''}
                                             className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500 text-white"
                                         >
-                                            {/* --- INÍCIO DA CORREÇÃO --- */}
-                                            {/* Lógica para opções passadas diretamente (como em Contas a Pagar) */}
                                             {field.options && field.options.map((opt, index) => (
                                                 <option key={index} value={opt.value}>{opt.label}</option>
                                             ))}
-
-                                            {/* Lógica para opções de fontes externas (como Tabelas de Preço em Clientes) */}
                                             {field.optionsKey && (
                                                 <>
                                                     <option value="">{field.placeholder}</option>
@@ -329,7 +328,6 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                                                     ))}
                                                 </>
                                             )}
-                                            {/* --- FIM DA CORREÇÃO --- */}
                                         </select>
                                     </div>
                                 );
@@ -463,10 +461,15 @@ const ExpenseFormModal = ({ onClose, currentItem, userId }) => {
 };
 
 // --- NOVO COMPONENTE: CONTAS A PAGAR ---
+// ATENÇÃO: Substitua este componente inteiro também
 const AccountsPayable = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentItem, setCurrentItem] = useState(null);
     const userId = auth.currentUser?.uid;
+
+    // --- NOVO ESTADO PARA CONTROLAR O MÊS SELECIONADO ---
+    // Inicia com o mês e ano atuais no formato 'AAAA-MM'
+    const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().substring(0, 7));
 
     const handleOpenModal = (item = null) => {
         setCurrentItem(item);
@@ -478,6 +481,14 @@ const AccountsPayable = () => {
         setCurrentItem(null);
     };
 
+    // --- NOVAS FUNÇÕES PARA NAVEGAR ENTRE OS MESES ---
+    const handleMonthChange = (increment) => {
+        const [year, month] = selectedMonth.split('-');
+        const currentDate = new Date(parseInt(year), parseInt(month) - 1, 2);
+        currentDate.setMonth(currentDate.getMonth() + increment);
+        setSelectedMonth(currentDate.toISOString().substring(0, 7));
+    };
+
     const getStatusClasses = (status) => {
         switch (status) {
             case 'Pago': return 'bg-green-100 text-green-800';
@@ -485,6 +496,12 @@ const AccountsPayable = () => {
             default: return 'bg-neutral-100 text-neutral-800';
         }
     };
+    
+    // Formata o nome do mês para exibição (ex: "Outubro de 2025")
+    const [year, month] = selectedMonth.split('-');
+    const displayDate = new Date(year, month - 1, 2);
+    const monthName = displayDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    const formattedMonthName = monthName.charAt(0).toUpperCase() + monthName.slice(1);
 
     return (
         <>
@@ -493,7 +510,7 @@ const AccountsPayable = () => {
                 title="Contas a Pagar"
                 fields={[]}
                 onAddItem={() => handleOpenModal()}
-                renderItem={(items, _onEdit, onDelete) => { // A função 'onEdit' do ManageGeneric é ignorada agora (_onEdit)
+                renderItem={(items, _onEdit, onDelete) => {
                     const groupedExpenses = items.reduce((acc, item) => {
                         const monthYearKey = item.dueDate.substring(0, 7);
                         if (!acc[monthYearKey]) {
@@ -503,69 +520,65 @@ const AccountsPayable = () => {
                         return acc;
                     }, {});
 
-                    const sortedMonthKeys = Object.keys(groupedExpenses).sort();
+                    // --- LÓGICA DE EXIBIÇÃO ATUALIZADA ---
+                    // Pega apenas as despesas do mês selecionado
+                    const monthExpenses = groupedExpenses[selectedMonth] || [];
+                    const monthTotal = monthExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
 
                     return (
-                        <div className="space-y-8">
-                            {sortedMonthKeys.map(monthKey => {
-                                const monthExpenses = groupedExpenses[monthKey];
-                                const monthTotal = monthExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
-                                
-                                const [year, month] = monthKey.split('-');
-                                const displayDate = new Date(year, month - 1, 2);
-                                const monthName = displayDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
-                                const formattedMonthName = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+                        <div className="space-y-4">
+                            {/* --- NOVO NAVEGADOR DE MÊS --- */}
+                            <div className="flex items-center justify-center gap-4 p-4 bg-neutral-800 rounded-lg">
+                                <Button onClick={() => handleMonthChange(-1)} variant="secondary">{"< Anterior"}</Button>
+                                <h2 className="text-xl font-bold text-yellow-500 w-64 text-center">{formattedMonthName}</h2>
+                                <Button onClick={() => handleMonthChange(1)} variant="secondary">{"Próximo >"}</Button>
+                            </div>
 
-                                return (
-                                    <div key={monthKey} className="bg-neutral-900 rounded-2xl shadow-md overflow-hidden">
-                                        <h2 className="text-xl font-bold text-yellow-500 p-4 bg-neutral-800">{formattedMonthName}</h2>
-                                        
-                                        <table className="w-full text-sm text-left text-neutral-400">
-                                            <thead className="text-xs text-neutral-300 uppercase bg-neutral-800">
-                                                <tr>
-                                                    <th scope="col" className="px-6 py-3">Descrição</th>
-                                                    <th scope="col" className="px-6 py-3">Categoria</th>
-                                                    <th scope="col" className="px-6 py-3">Vencimento</th>
-                                                    <th scope="col" className="px-6 py-3 text-right">Valor</th>
-                                                    <th scope="col" className="px-6 py-3 text-center">Status</th>
-                                                    <th scope="col" className="px-6 py-3 text-center">Ações</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {monthExpenses.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(item => (
-                                                    <tr key={item.id} className="border-b border-neutral-800 hover:bg-neutral-800">
-                                                        <td className="px-6 py-4 font-medium text-white">{item.description}</td>
-                                                        <td className="px-6 py-4">{item.category}</td>
-                                                        <td className="px-6 py-4">{new Date(item.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                                                        <td className="px-6 py-4 text-right font-semibold text-red-400">R$ {item.amount?.toFixed(2)}</td>
-                                                        <td className="px-6 py-4 text-center">
-                                                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusClasses(item.status)}`}>
-                                                                {item.status}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-center">
-                                                            <div className="flex justify-center items-center gap-2">
-                                                                {/* --- CORREÇÃO APLICADA AQUI --- */}
-                                                                {/* O botão agora chama a função 'handleOpenModal' correta, do próprio componente */}
-                                                                <button onClick={() => handleOpenModal(item)} className="text-blue-400 hover:text-blue-300 p-1"><LucideEdit size={18} /></button>
-                                                                <button onClick={() => onDelete(item.id)} className="text-red-500 hover:text-red-400 p-1"><LucideTrash2 size={18} /></button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                            <tfoot className="border-t-2 border-neutral-700">
-                                                <tr className="font-bold text-white bg-neutral-800">
-                                                    <td colSpan="3" className="px-6 py-3 text-right uppercase">Subtotal do Mês</td>
-                                                    <td className="px-6 py-3 text-right text-red-400">R$ {monthTotal.toFixed(2)}</td>
-                                                    <td colSpan="2"></td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
-                                    </div>
-                                );
-                            })}
-                            {sortedMonthKeys.length === 0 && <p className="text-center p-8 text-neutral-500 bg-neutral-900 rounded-2xl">Nenhuma conta encontrada.</p>}
+                            {/* A tabela agora mostra apenas o mês selecionado */}
+                            {monthExpenses.length > 0 ? (
+                                <table className="w-full text-sm text-left text-neutral-400">
+                                    <thead className="text-xs text-neutral-300 uppercase bg-neutral-800">
+                                        <tr>
+                                            <th scope="col" className="px-6 py-3">Descrição</th>
+                                            <th scope="col" className="px-6 py-3">Categoria</th>
+                                            <th scope="col" className="px-6 py-3">Vencimento</th>
+                                            <th scope="col" className="px-6 py-3 text-right">Valor</th>
+                                            <th scope="col" className="px-6 py-3 text-center">Status</th>
+                                            <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {monthExpenses.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(item => (
+                                            <tr key={item.id} className="border-b border-neutral-800 hover:bg-neutral-800">
+                                                <td className="px-6 py-4 font-medium text-white">{item.description}</td>
+                                                <td className="px-6 py-4">{item.category}</td>
+                                                <td className="px-6 py-4">{new Date(item.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                                <td className="px-6 py-4 text-right font-semibold text-red-400">R$ {item.amount?.toFixed(2)}</td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusClasses(item.status)}`}>
+                                                        {item.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <div className="flex justify-center items-center gap-2">
+                                                        <button onClick={() => handleOpenModal(item)} className="text-blue-400 hover:text-blue-300 p-1"><LucideEdit size={18} /></button>
+                                                        <button onClick={() => onDelete(item.id)} className="text-red-500 hover:text-red-400 p-1"><LucideTrash2 size={18} /></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="border-t-2 border-neutral-700">
+                                        <tr className="font-bold text-white bg-neutral-800">
+                                            <td colSpan="3" className="px-6 py-3 text-right uppercase">Subtotal do Mês</td>
+                                            <td className="px-6 py-3 text-right text-red-400">R$ {monthTotal.toFixed(2)}</td>
+                                            <td colSpan="2"></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            ) : (
+                                <p className="text-center p-8 text-neutral-500">Nenhuma conta encontrada para este mês.</p>
+                            )}
                         </div>
                     );
                 }}
