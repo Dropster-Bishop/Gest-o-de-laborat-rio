@@ -314,10 +314,22 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                                             defaultValue={currentItem ? currentItem[field.name] : ''}
                                             className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500 text-white"
                                         >
-                                            <option value="">{field.placeholder}</option>
-                                            {customProps[field.optionsKey]?.map(option => (
-                                                <option key={option.id} value={option.id}>{option.name}</option>
+                                            {/* --- INÍCIO DA CORREÇÃO --- */}
+                                            {/* Lógica para opções passadas diretamente (como em Contas a Pagar) */}
+                                            {field.options && field.options.map((opt, index) => (
+                                                <option key={index} value={opt.value}>{opt.label}</option>
                                             ))}
+
+                                            {/* Lógica para opções de fontes externas (como Tabelas de Preço em Clientes) */}
+                                            {field.optionsKey && (
+                                                <>
+                                                    <option value="">{field.placeholder}</option>
+                                                    {customProps[field.optionsKey]?.map(option => (
+                                                        <option key={option.id} value={option.id}>{option.name}</option>
+                                                    ))}
+                                                </>
+                                            )}
+                                            {/* --- FIM DA CORREÇÃO --- */}
                                         </select>
                                     </div>
                                 );
