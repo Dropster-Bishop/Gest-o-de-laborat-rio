@@ -358,13 +358,126 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
         </div>
     );
 };
+// Adicione este novo componente para o formulário de despesas
+const ExpenseFormModal = ({ onClose, currentItem, userId }) => {
+    const formRef = useRef({});
+    const [isRecurring, setIsRecurring] = useState(false);
+    const [installments, setInstallments] = useState(1);
 
-// --- NOVO COMPONENTE: CONTAS A PAGAR ---
-const AccountsPayable = () => {
     const expenseCategories = [
         'Salários', 'Aluguel', 'Contas (Água, Luz, Internet)', 'Marketing',
         'Impostos', 'Fornecedores / Matéria-prima', 'Manutenção', 'Outros'
     ];
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!userId) return;
+
+        const baseDescription = formRef.current.description.value;
+        const category = formRef.current.category.value;
+        const amount = parseFloat(formRef.current.amount.value);
+        const dueDate = formRef.current.dueDate.value;
+        const status = formRef.current.status.value;
+
+        try {
+            const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/expenses`);
+
+            if (currentItem) { // --- LÓGICA PARA EDITAR ---
+                const docRef = doc(db, collectionRef.path, currentItem.id);
+                await updateDoc(docRef, { description: baseDescription, category, amount, dueDate, status });
+            } else if (isRecurring && installments > 1) { // --- LÓGICA PARA CRIAR PARCELAS ---
+                const batch = writeBatch(db);
+                for (let i = 0; i < installments; i++) {
+                    const installmentDate = new Date(dueDate);
+                    installmentDate.setUTCMonth(installmentDate.getUTCMonth() + i);
+
+                    const expenseData = {
+                        description: `${baseDescription} (${i + 1}/${installments})`,
+                        category,
+                        amount,
+                        dueDate: installmentDate.toISOString().split('T')[0],
+                        status: 'A Pagar', // Parcelas futuras são sempre "A Pagar"
+                    };
+                    const newDocRef = doc(collectionRef);
+                    batch.set(newDocRef, expenseData);
+                }
+                await batch.commit();
+            } else { // --- LÓGICA PARA CRIAR DESPESA ÚNICA ---
+                await addDoc(collectionRef, { description: baseDescription, category, amount, dueDate, status });
+            }
+
+            onClose();
+        } catch (error) {
+            console.error("Erro ao salvar despesa:", error);
+            alert("Ocorreu um erro ao salvar a despesa.");
+        }
+    };
+
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <Input label="Descrição da Despesa" defaultValue={currentItem?.description} ref={el => formRef.current.description = el} required />
+            <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-1">Categoria</label>
+                <select defaultValue={currentItem?.category} ref={el => formRef.current.category = el} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500 text-white" required>
+                    <option value="">Selecione uma categoria</option>
+                    {expenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+            </div>
+            <Input label="Valor (R$)" type="number" step="0.01" defaultValue={currentItem?.amount} ref={el => formRef.current.amount = el} required />
+            <Input label="Data de Vencimento" type="date" defaultValue={currentItem?.dueDate} ref={el => formRef.current.dueDate = el} required />
+            <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-1">Status</label>
+                <select defaultValue={currentItem?.status || 'A Pagar'} ref={el => formRef.current.status = el} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500 text-white" required>
+                    <option value="A Pagar">A Pagar</option>
+                    <option value="Pago">Pago</option>
+                </select>
+            </div>
+            
+            {/* --- NOVOS CAMPOS PARA PARCELAS (SÓ APARECEM AO ADICIONAR) --- */}
+            {!currentItem && (
+                <div className="pt-4 border-t border-neutral-700 space-y-4">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="h-4 w-4 rounded border-neutral-500 bg-neutral-700 text-yellow-500 focus:ring-yellow-500" />
+                        <span className="text-sm text-neutral-300">Repetir esta despesa</span>
+                    </label>
+                    {isRecurring && (
+                        <Input 
+                            label="Número de Parcelas" 
+                            type="number" 
+                            min="2" 
+                            value={installments} 
+                            onChange={e => setInstallments(parseInt(e.target.value, 10))}
+                            placeholder="Ex: 12"
+                        />
+                    )}
+                </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4">
+                <Button type="button" onClick={onClose} variant="secondary">Cancelar</Button>
+                <Button type="submit" variant="primary">Salvar</Button>
+            </div>
+        </form>
+    );
+};
+
+// --- NOVO COMPONENTE: CONTAS A PAGAR ---
+const AccountsPayable = () => {
+    // --- LÓGICA DO MODAL MOVIDA PARA CÁ ---
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [currentItem, setCurrentItem] = useState(null);
+    const userId = auth.currentUser?.uid;
+
+    const handleOpenModal = (item = null) => {
+        setCurrentItem(item);
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setCurrentItem(null);
+    };
 
     const getStatusClasses = (status) => {
         switch (status) {
@@ -373,64 +486,77 @@ const AccountsPayable = () => {
             default: return 'bg-neutral-100 text-neutral-800';
         }
     };
-
+    
+    // O componente ManageGeneric agora foca apenas na exibição da lista
     return (
-        <ManageGeneric
-            collectionName="expenses"
-            title="Contas a Pagar"
-            fields={[
-                { name: 'description', label: 'Descrição da Despesa', type: 'text', required: true },
-                {
-                    name: 'category', label: 'Categoria', type: 'select', required: true, options: [
-                        { value: '', label: 'Selecione uma categoria' },
-                        ...expenseCategories.map(cat => ({ value: cat, label: cat }))
-                    ]
-                },
-                { name: 'amount', label: 'Valor (R$)', type: 'number', required: true },
-                { name: 'dueDate', label: 'Data de Vencimento', type: 'date', required: true },
-                {
-                    name: 'status', label: 'Status', type: 'select', required: true, options: [
-                        { value: 'A Pagar', label: 'A Pagar' },
-                        { value: 'Pago', label: 'Pago' }
-                    ]
-                }
-            ]}
-            renderItem={(items, onEdit, onDelete) => (
-                <table className="w-full text-sm text-left text-neutral-400">
-                    <thead className="text-xs text-neutral-300 uppercase bg-neutral-800">
-                        <tr>
-                            <th scope="col" className="px-6 py-3">Descrição</th>
-                            <th scope="col" className="px-6 py-3">Categoria</th>
-                            <th scope="col" className="px-6 py-3">Vencimento</th>
-                            <th scope="col" className="px-6 py-3 text-right">Valor</th>
-                            <th scope="col" className="px-6 py-3 text-center">Status</th>
-                            <th scope="col" className="px-6 py-3 text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {items.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(item => (
-                            <tr key={item.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-neutral-800">
-                                <td className="px-6 py-4 font-medium text-white">{item.description}</td>
-                                <td className="px-6 py-4">{item.category}</td>
-                                <td className="px-6 py-4">{new Date(item.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                                <td className="px-6 py-4 text-right font-semibold text-red-400">R$ {item.amount?.toFixed(2)}</td>
-                                <td className="px-6 py-4 text-center">
-                                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusClasses(item.status)}`}>
-                                        {item.status}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 text-center">
-                                    <div className="flex justify-center items-center gap-2">
-                                        <button onClick={() => onEdit(item)} className="text-blue-400 hover:text-blue-300 p-1"><LucideEdit size={18} /></button>
-                                        <button onClick={() => onDelete(item.id)} className="text-red-500 hover:text-red-400 p-1"><LucideTrash2 size={18} /></button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+        <>
+            <ManageGeneric
+                collectionName="expenses"
+                title="Contas a Pagar"
+                fields={[]} // Os campos do formulário agora estão no ExpenseFormModal
+                // Passamos a função de abrir o modal para o ManageGeneric
+                onAddItem={() => handleOpenModal()} 
+                renderItem={(items, onEdit, onDelete) => {
+                    // --- NOVO CÁLCULO DO TOTAL ---
+                    const totalAmount = items.reduce((sum, item) => sum + (item.amount || 0), 0);
+                    
+                    return (
+                        <table className="w-full text-sm text-left text-neutral-400">
+                            <thead className="text-xs text-neutral-300 uppercase bg-neutral-800">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3">Descrição</th>
+                                    <th scope="col" className="px-6 py-3">Categoria</th>
+                                    <th scope="col" className="px-6 py-3">Vencimento</th>
+                                    <th scope="col" className="px-6 py-3 text-right">Valor</th>
+                                    <th scope="col" className="px-6 py-3 text-center">Status</th>
+                                    <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {items.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(item => (
+                                    <tr key={item.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-neutral-800">
+                                        <td className="px-6 py-4 font-medium text-white">{item.description}</td>
+                                        <td className="px-6 py-4">{item.category}</td>
+                                        <td className="px-6 py-4">{new Date(item.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                        <td className="px-6 py-4 text-right font-semibold text-red-400">R$ {item.amount?.toFixed(2)}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusClasses(item.status)}`}>
+                                                {item.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="flex justify-center items-center gap-2">
+                                                {/* O botão de editar agora chama a função daqui */}
+                                                <button onClick={() => onEdit(item)} className="text-blue-400 hover:text-blue-300 p-1"><LucideEdit size={18} /></button>
+                                                <button onClick={() => onDelete(item.id)} className="text-red-500 hover:text-red-400 p-1"><LucideTrash2 size={18} /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            {/* --- NOVO RODAPÉ COM O VALOR TOTAL --- */}
+                            <tfoot className="border-t-2 border-neutral-700">
+                                <tr className="font-bold text-white bg-neutral-800">
+                                    <td colSpan="3" className="px-6 py-3 text-right uppercase">Total</td>
+                                    <td className="px-6 py-3 text-right text-red-400">R$ {totalAmount.toFixed(2)}</td>
+                                    <td colSpan="2"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    );
+                }}
+            />
+            {/* O modal agora é renderizado aqui com o formulário customizado */}
+            {isModalOpen && (
+                <Modal onClose={handleCloseModal} title={currentItem ? "Editar Conta" : "Adicionar Nova Conta"}>
+                    <ExpenseFormModal 
+                        onClose={handleCloseModal} 
+                        currentItem={currentItem} 
+                        userId={userId} 
+                    />
+                </Modal>
             )}
-        />
+        </>
     );
 };
 
