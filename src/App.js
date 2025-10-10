@@ -493,10 +493,8 @@ const AccountsPayable = () => {
                 title="Contas a Pagar"
                 fields={[]}
                 onAddItem={() => handleOpenModal()}
-                renderItem={(items, onEdit, onDelete) => {
-                    // --- INÍCIO DA LÓGICA DE AGRUPAMENTO POR MÊS ---
+                renderItem={(items, _onEdit, onDelete) => { // A função 'onEdit' do ManageGeneric é ignorada agora (_onEdit)
                     const groupedExpenses = items.reduce((acc, item) => {
-                        // Extrai a chave 'AAAA-MM' da data de vencimento
                         const monthYearKey = item.dueDate.substring(0, 7);
                         if (!acc[monthYearKey]) {
                             acc[monthYearKey] = [];
@@ -505,26 +503,21 @@ const AccountsPayable = () => {
                         return acc;
                     }, {});
 
-                    // Ordena as chaves (meses) em ordem cronológica
                     const sortedMonthKeys = Object.keys(groupedExpenses).sort();
-                    // --- FIM DA LÓGICA DE AGRUPAMENTO ---
 
                     return (
                         <div className="space-y-8">
-                            {/* Itera sobre cada mês ordenado */}
                             {sortedMonthKeys.map(monthKey => {
                                 const monthExpenses = groupedExpenses[monthKey];
                                 const monthTotal = monthExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
                                 
-                                // Formata o nome do mês para exibição (ex: "Outubro de 2025")
                                 const [year, month] = monthKey.split('-');
-                                const displayDate = new Date(year, month - 1, 2); // Usar dia 2 para evitar bugs de fuso horário
+                                const displayDate = new Date(year, month - 1, 2);
                                 const monthName = displayDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
                                 const formattedMonthName = monthName.charAt(0).toUpperCase() + monthName.slice(1);
 
                                 return (
                                     <div key={monthKey} className="bg-neutral-900 rounded-2xl shadow-md overflow-hidden">
-                                        {/* Cabeçalho com o nome do mês */}
                                         <h2 className="text-xl font-bold text-yellow-500 p-4 bg-neutral-800">{formattedMonthName}</h2>
                                         
                                         <table className="w-full text-sm text-left text-neutral-400">
@@ -539,7 +532,6 @@ const AccountsPayable = () => {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {/* Ordena as despesas do mês pela data de vencimento */}
                                                 {monthExpenses.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(item => (
                                                     <tr key={item.id} className="border-b border-neutral-800 hover:bg-neutral-800">
                                                         <td className="px-6 py-4 font-medium text-white">{item.description}</td>
@@ -553,7 +545,9 @@ const AccountsPayable = () => {
                                                         </td>
                                                         <td className="px-6 py-4 text-center">
                                                             <div className="flex justify-center items-center gap-2">
-                                                                <button onClick={() => onEdit(item)} className="text-blue-400 hover:text-blue-300 p-1"><LucideEdit size={18} /></button>
+                                                                {/* --- CORREÇÃO APLICADA AQUI --- */}
+                                                                {/* O botão agora chama a função 'handleOpenModal' correta, do próprio componente */}
+                                                                <button onClick={() => handleOpenModal(item)} className="text-blue-400 hover:text-blue-300 p-1"><LucideEdit size={18} /></button>
                                                                 <button onClick={() => onDelete(item.id)} className="text-red-500 hover:text-red-400 p-1"><LucideTrash2 size={18} /></button>
                                                             </div>
                                                         </td>
@@ -571,7 +565,6 @@ const AccountsPayable = () => {
                                     </div>
                                 );
                             })}
-                             {/* Mensagem caso não haja nenhuma despesa */}
                             {sortedMonthKeys.length === 0 && <p className="text-center p-8 text-neutral-500 bg-neutral-900 rounded-2xl">Nenhuma conta encontrada.</p>}
                         </div>
                     );
