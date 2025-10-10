@@ -1004,6 +1004,16 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             (order.employeeName && order.employeeName.toLowerCase().includes(lowerCaseSearchTerm));
         return matchesFilter && matchesSearch;
     });
+    
+    // --- MODIFICAÇÃO 1: Adicionada a lógica para ordenar pela data de entrega ---
+    const sortedOrders = filteredOrders.sort((a, b) => {
+        // Joga ordens sem data de entrega para o final da lista
+        if (!a.deliveryDate) return 1;
+        if (!b.deliveryDate) return -1;
+        // Ordena pela data mais próxima (ascendente)
+        return new Date(a.deliveryDate) - new Date(b.deliveryDate);
+    });
+
 
     return (
         <div className="animate-fade-in">
@@ -1033,7 +1043,8 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredOrders.map(order => (
+                            {/* --- MODIFICAÇÃO 2: A tabela agora usa "sortedOrders" --- */}
+                            {sortedOrders.map(order => (
                                 <tr key={order.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-neutral-800">
                                     <td className="px-6 py-4 font-medium text-white">#{order.number}</td><td className="px-6 py-4">{order.clientName}</td>
                                     <td className="px-6 py-4">{order.patientName}</td><td className="px-6 py-4">{order.employeeName}</td>
@@ -1054,7 +1065,8 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                             ))}
                         </tbody>
                     </table>
-                    {filteredOrders.length === 0 && <p className="text-center p-8 text-neutral-500">Nenhuma ordem de serviço encontrada para este filtro.</p>}
+                    {/* --- MODIFICAÇÃO 3: Verificação de lista vazia também usa "sortedOrders" --- */}
+                    {sortedOrders.length === 0 && <p className="text-center p-8 text-neutral-500">Nenhuma ordem de serviço encontrada para este filtro.</p>}
                 </div>
             </div>
 
@@ -1112,7 +1124,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                                 <h3 className="font-bold mb-2 border-b">Observações</h3>
                                 <p className="text-sm italic">{currentOrder.observations || 'Nenhuma observação.'}</p>
                             </div>
-                            {/* <-- MODIFICAÇÃO: Atualizado bloco de totais para exibir subtotal e desconto, se houver */}
                             <div className="text-right">
                                 <p className="hide-on-print"><strong>Comissão Total:</strong> R$ {(currentOrder.commissionValue || 0).toFixed(2)}</p>
                                 {currentOrder.discountPercentage > 0 && (
