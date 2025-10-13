@@ -12,7 +12,6 @@ import {
     signInWithEmailAndPassword,
     signOut,
     sendPasswordResetEmail,
-    // --- NOVO --- Importado para criar utilizadores cliente sem fazer login automático
     createUserWithEmailAndPassword as createClientUser
 } from 'firebase/auth';
 import {
@@ -32,7 +31,6 @@ import {
     getDocs,
     orderBy
 } from 'firebase/firestore';
-// --- NOVO --- Importações do Firebase Storage para upload de arquivos
 import {
     getStorage,
     ref,
@@ -47,7 +45,6 @@ import {
     LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock,
     LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle,
     LucideChevronDown, LucideSettings, LucideFileText, LucideTruck, LucideReceipt,
-    // --- NOVO --- Ícones adicionais
     LucideUpload, LucideKeyRound, LucidePaperclip, LucideEye
 } from 'lucide-react';
 
@@ -65,7 +62,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-// --- NOVO --- Inicialização do Storage
 const storage = getStorage(app);
 const appId = firebaseConfig.appId || 'default-app-id';
 
@@ -194,7 +190,6 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
     );
 };
 
-// --- MODIFICADO --- Componente genérico para aceitar ações customizadas
 const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps = {}, onAddItem, customActions = [] }) => {
     const [items, setItems] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -2567,6 +2562,8 @@ const FinancialDashboard = ({ orders, expenses, setActivePage }) => {
         </div>
     );
 };
+
+// --- CORRIGIDO --- Componente LoginScreen atualizado para permitir login de clientes
 const LoginScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [isPasswordReset, setIsPasswordReset] = useState(false);
@@ -2589,15 +2586,20 @@ const LoginScreen = () => {
                 const userDocRef = doc(db, "users", user.uid);
                 const userDoc = await getDoc(userDocRef);
 
-                // --- MODIFICADO --- Aceita login de utilizadores "user" ou "admin", mas rejeita "client"
-                if (!userDoc.exists() || userDoc.data().status !== 'approved' || userDoc.data().role === 'client') {
+                // --- MODIFICAÇÃO CHAVE ---
+                // Removemos a verificação 'userDoc.data().role === 'client''
+                // Agora, qualquer utilizador aprovado pode fazer login aqui.
+                // A lógica de qual tela mostrar fica no componente <App />.
+                if (!userDoc.exists() || userDoc.data().status !== 'approved') {
                     await signOut(auth);
-                    setError("A sua conta está pendente de aprovação, não foi encontrada ou é uma conta de cliente.");
+                    setError("A sua conta está pendente de aprovação ou não foi encontrada.");
                 }
+                // Se o login for bem-sucedido e o utilizador for aprovado, o onAuthStateChanged no App.js tratará do resto.
+
             } catch (err) {
                 setError("E-mail ou senha incorretos.");
             }
-        } else {
+        } else { // Lógica de registo (apenas para administradores/utilizadores)
             try {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
@@ -2607,7 +2609,7 @@ const LoginScreen = () => {
                     email: user.email,
                     uid: user.uid,
                     status: 'pending',
-                    role: 'user', // --- Utilizadores padrão se registam como 'user'
+                    role: 'user', // Novos registos são 'user'
                     createdAt: serverTimestamp()
                 });
 
@@ -2661,10 +2663,10 @@ const LoginScreen = () => {
                 <div className="text-center">
                     <LucideClipboardEdit className="h-12 w-12 text-yellow-500 mx-auto" />
                     <h1 className="text-3xl font-bold text-white mt-2">
-                        {isPasswordReset ? 'Recuperar Senha' : 'Gestor Próteses'}
+                        {isPasswordReset ? 'Recuperar Senha' : 'Acesso ao Sistema'}
                     </h1>
                     <p className="text-neutral-400">
-                        {isPasswordReset ? 'Insira seu e-mail para continuar' : (isLogin ? 'Faça login para continuar' : 'Crie a sua conta')}
+                        {isPasswordReset ? 'Insira seu e-mail para continuar' : (isLogin ? 'Faça login para continuar' : 'Crie a sua conta de gestor')}
                     </p>
                 </div>
 
@@ -2700,7 +2702,7 @@ const LoginScreen = () => {
                     {isPasswordReset ? (
                         <span>Lembrou da senha? </span>
                     ) : (
-                        <span>{isLogin ? 'Não tem uma conta?' : 'Já tem uma conta?'} </span>
+                        <span>{isLogin ? 'Não tem uma conta de gestor?' : 'Já tem uma conta?'} </span>
                     )}
                     <button
                         onClick={() => toggleView(isLogin || isPasswordReset ? 'register' : 'login')}
@@ -2725,7 +2727,7 @@ const LoginScreen = () => {
     );
 };
 
-// --- NOVO --- Componente de gestão de acesso para o cliente
+
 const ClientAccessModal = ({ client, onClose }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -2840,7 +2842,6 @@ const ClientAccessModal = ({ client, onClose }) => {
 };
 
 
-// --- NOVO --- Componente de Upload e listagem de arquivos
 const FileManager = ({ ownerId, clientId, orderId }) => {
     const [files, setFiles] = useState([]);
     const [uploading, setUploading] = useState(false);
@@ -2941,7 +2942,6 @@ const FileManager = ({ ownerId, clientId, orderId }) => {
 };
 
 
-// --- NOVO --- Layout e componentes para o Portal do Cliente
 const ClientPortalLayout = ({ user, userProfile }) => {
     const [orders, setOrders] = useState([]);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -3030,7 +3030,6 @@ const ClientPortalLayout = ({ user, userProfile }) => {
                             <h3 className="font-bold text-neutral-300 mb-2 border-b border-neutral-600 pb-1">Observações</h3>
                             <p className="text-sm italic text-neutral-400">{selectedOrder.observations || 'Nenhuma observação.'}</p>
                         </div>
-                        {/* --- NOVO --- Componente de ficheiros integrado --- */}
                         <FileManager 
                             ownerId={userProfile.ownerId}
                             clientId={userProfile.clientId}
@@ -3118,7 +3117,6 @@ const AppLayout = ({ user, userProfile }) => {
     const [suppliers, setSuppliers] = useState([]);
     const [expenses, setExpenses] = useState([]);
     const [companyProfile, setCompanyProfile] = useState(null);
-    // --- NOVO --- Estado para gerir o modal de acesso do cliente
     const [isAccessModalOpen, setAccessModalOpen] = useState(false);
     const [selectedClientForAccess, setSelectedClientForAccess] = useState(null);
 
@@ -3162,7 +3160,6 @@ const AppLayout = ({ user, userProfile }) => {
         }
     };
     
-    // --- NOVO --- Funções para controlar o modal de acesso
     const handleOpenAccessModal = (client) => {
         setSelectedClientForAccess(client);
         setAccessModalOpen(true);
@@ -3204,7 +3201,6 @@ const AppLayout = ({ user, userProfile }) => {
                                                 <p className="text-sm text-neutral-400 truncate">{priceTables.find(pt => pt.id === item.priceTableId)?.name || 'Preço Padrão'}</p>
                                             </div>
                                             <div className="flex justify-end gap-2 mt-4">
-                                                {/* --- NOVO --- Botão para gerir acesso */}
                                                 <button onClick={() => handleOpenAccessModal(item)} className="p-2 text-yellow-500 hover:bg-yellow-900 rounded-full" title="Gerir Acesso ao Portal"><LucideKeyRound size={18} /></button>
                                                 <button onClick={() => onEdit(item)} className="p-2 text-blue-400 hover:bg-blue-900 rounded-full" title="Editar Cliente"><LucideEdit size={18} /></button>
                                                 <button onClick={() => onDelete(item.id)} className="p-2 text-red-500 hover:bg-red-900 rounded-full" title="Excluir Cliente"><LucideTrash2 size={18} /></button>
@@ -3214,7 +3210,6 @@ const AppLayout = ({ user, userProfile }) => {
                                 </div>
                             )}
                         />
-                        {/* --- NOVO --- Renderização do modal de acesso */}
                         {isAccessModalOpen && selectedClientForAccess && (
                             <ClientAccessModal 
                                 client={selectedClientForAccess}
@@ -3515,7 +3510,6 @@ export default function App() {
                         setUser(user);
                         setUserProfile(userDoc.data());
                     } else {
-                        // Se o utilizador não for aprovado, ou o documento não existir, desloga-o.
                         await signOut(auth);
                         setUser(null);
                         setUserProfile(null);
@@ -3556,13 +3550,11 @@ export default function App() {
       `}</style>
     );
 
-    // --- MODIFICADO --- Lógica de renderização principal para distinguir entre admin/utilizador e cliente
     const renderContent = () => {
         if (user && userProfile) {
             if (userProfile.role === 'client') {
                 return <ClientPortalLayout user={user} userProfile={userProfile} />;
             }
-            // Para 'admin' ou 'user'
             return <AppLayout user={user} userProfile={userProfile} />;
         }
         return <LoginScreen />;
