@@ -11,7 +11,9 @@ import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signOut,
-    sendPasswordResetEmail
+    sendPasswordResetEmail,
+    // --- NOVO --- Importado para criar utilizadores cliente sem fazer login automático
+    createUserWithEmailAndPassword as createClientUser
 } from 'firebase/auth';
 import {
     getFirestore,
@@ -30,12 +32,23 @@ import {
     getDocs,
     orderBy
 } from 'firebase/firestore';
+// --- NOVO --- Importações do Firebase Storage para upload de arquivos
+import {
+    getStorage,
+    ref,
+    uploadBytesResumable,
+    getDownloadURL,
+    listAll,
+    deleteObject
+} from "firebase/storage";
 import {
     LucideClipboardEdit, LucideUsers, LucideHammer, LucideListOrdered,
     LucideBarChart3, LucidePlusCircle, LucideTrash2, LucideEdit, LucideSearch,
     LucidePrinter, LucideFileDown, LucideX, LucideCheckCircle, LucideClock,
     LucideDollarSign, LucideLogOut, LucideUserCheck, LucideBoxes, LucideAlertTriangle,
-    LucideChevronDown, LucideSettings, LucideFileText, LucideTruck, LucideReceipt
+    LucideChevronDown, LucideSettings, LucideFileText, LucideTruck, LucideReceipt,
+    // --- NOVO --- Ícones adicionais
+    LucideUpload, LucideKeyRound, LucidePaperclip, LucideEye
 } from 'lucide-react';
 
 // --- Configuração do Firebase ---
@@ -52,7 +65,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+// --- NOVO --- Inicialização do Storage
+const storage = getStorage(app);
 const appId = firebaseConfig.appId || 'default-app-id';
+
 
 // --- Componentes Auxiliares (Helpers) ---
 
@@ -178,8 +194,8 @@ const Dashboard = ({ setActivePage, serviceOrders, inventory }) => {
     );
 };
 
-// ATENÇÃO: Substitua este componente inteiro
-const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps = {}, onAddItem }) => {
+// --- MODIFICADO --- Componente genérico para aceitar ações customizadas
+const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps = {}, onAddItem, customActions = [] }) => {
     const [items, setItems] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentItem, setCurrentItem] = useState(null);
@@ -273,8 +289,6 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
                             className="pl-10"
                         />
                     </div>
-                    {/* --- CORREÇÃO DO BOTÃO ADICIONAR --- */}
-                    {/* O botão agora usa a função 'onAddItem' se ela for fornecida, caso contrário, usa a função padrão */}
                     <Button onClick={onAddItem ? onAddItem : () => handleOpenModal()}>
                         <LucidePlusCircle size={20} />
                         Adicionar
@@ -284,11 +298,11 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
 
             <div className="bg-neutral-900 rounded-2xl shadow-md overflow-hidden">
                 <div className="overflow-x-auto">
-                    {filteredItems.length > 0 ? renderItem(filteredItems, handleOpenModal, handleDelete) : <p className="text-center p-8 text-neutral-500">Nenhum item encontrado.</p>}
+                    {filteredItems.length > 0 ? renderItem(filteredItems, handleOpenModal, handleDelete, customActions) : <p className="text-center p-8 text-neutral-500">Nenhum item encontrado.</p>}
                 </div>
             </div>
 
-            {isModalOpen && !onAddItem && ( // O modal genérico só abre se não houver uma função customizada
+            {isModalOpen && !onAddItem && (
                 <Modal onClose={handleCloseModal} title={currentItem ? `Editar ${title.slice(0, -1)}` : `Adicionar ${title.slice(0, -1)}`}>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {fields.map(field => {
@@ -356,7 +370,7 @@ const ManageGeneric = ({ collectionName, title, fields, renderItem, customProps 
         </div>
     );
 };
-// Adicione este novo componente para o formulário de despesas
+
 const ExpenseFormModal = ({ onClose, currentItem, userId }) => {
     const formRef = useRef({});
     const [isRecurring, setIsRecurring] = useState(false);
@@ -380,10 +394,10 @@ const ExpenseFormModal = ({ onClose, currentItem, userId }) => {
         try {
             const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/expenses`);
 
-            if (currentItem) { // --- LÓGICA PARA EDITAR ---
+            if (currentItem) {
                 const docRef = doc(db, collectionRef.path, currentItem.id);
                 await updateDoc(docRef, { description: baseDescription, category, amount, dueDate, status });
-            } else if (isRecurring && installments > 1) { // --- LÓGICA PARA CRIAR PARCELAS ---
+            } else if (isRecurring && installments > 1) {
                 const batch = writeBatch(db);
                 for (let i = 0; i < installments; i++) {
                     const installmentDate = new Date(dueDate);
@@ -394,13 +408,13 @@ const ExpenseFormModal = ({ onClose, currentItem, userId }) => {
                         category,
                         amount,
                         dueDate: installmentDate.toISOString().split('T')[0],
-                        status: 'A Pagar', // Parcelas futuras são sempre "A Pagar"
+                        status: 'A Pagar',
                     };
                     const newDocRef = doc(collectionRef);
                     batch.set(newDocRef, expenseData);
                 }
                 await batch.commit();
-            } else { // --- LÓGICA PARA CRIAR DESPESA ÚNICA ---
+            } else {
                 await addDoc(collectionRef, { description: baseDescription, category, amount, dueDate, status });
             }
 
@@ -432,7 +446,6 @@ const ExpenseFormModal = ({ onClose, currentItem, userId }) => {
                 </select>
             </div>
             
-            {/* --- NOVOS CAMPOS PARA PARCELAS (SÓ APARECEM AO ADICIONAR) --- */}
             {!currentItem && (
                 <div className="pt-4 border-t border-neutral-700 space-y-4">
                     <label className="flex items-center gap-3 cursor-pointer">
@@ -460,15 +473,10 @@ const ExpenseFormModal = ({ onClose, currentItem, userId }) => {
     );
 };
 
-// --- NOVO COMPONENTE: CONTAS A PAGAR ---
-// ATENÇÃO: Substitua este componente inteiro também
 const AccountsPayable = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentItem, setCurrentItem] = useState(null);
     const userId = auth.currentUser?.uid;
-
-    // --- NOVO ESTADO PARA CONTROLAR O MÊS SELECIONADO ---
-    // Inicia com o mês e ano atuais no formato 'AAAA-MM'
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().substring(0, 7));
 
     const handleOpenModal = (item = null) => {
@@ -481,7 +489,6 @@ const AccountsPayable = () => {
         setCurrentItem(null);
     };
 
-    // --- NOVAS FUNÇÕES PARA NAVEGAR ENTRE OS MESES ---
     const handleMonthChange = (increment) => {
         const [year, month] = selectedMonth.split('-');
         const currentDate = new Date(parseInt(year), parseInt(month) - 1, 2);
@@ -497,7 +504,6 @@ const AccountsPayable = () => {
         }
     };
     
-    // Formata o nome do mês para exibição (ex: "Outubro de 2025")
     const [year, month] = selectedMonth.split('-');
     const displayDate = new Date(year, month - 1, 2);
     const monthName = displayDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
@@ -520,21 +526,17 @@ const AccountsPayable = () => {
                         return acc;
                     }, {});
 
-                    // --- LÓGICA DE EXIBIÇÃO ATUALIZADA ---
-                    // Pega apenas as despesas do mês selecionado
                     const monthExpenses = groupedExpenses[selectedMonth] || [];
                     const monthTotal = monthExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
 
                     return (
                         <div className="space-y-4">
-                            {/* --- NOVO NAVEGADOR DE MÊS --- */}
                             <div className="flex items-center justify-center gap-4 p-4 bg-neutral-800 rounded-lg">
                                 <Button onClick={() => handleMonthChange(-1)} variant="secondary">{"< Anterior"}</Button>
                                 <h2 className="text-xl font-bold text-yellow-500 w-64 text-center">{formattedMonthName}</h2>
                                 <Button onClick={() => handleMonthChange(1)} variant="secondary">{"Próximo >"}</Button>
                             </div>
 
-                            {/* A tabela agora mostra apenas o mês selecionado */}
                             {monthExpenses.length > 0 ? (
                                 <table className="w-full text-sm text-left text-neutral-400">
                                     <thead className="text-xs text-neutral-300 uppercase bg-neutral-800">
@@ -620,7 +622,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     const [selectedMaterial, setSelectedMaterial] = useState('');
     const formRef = useRef({});
 
-    // <-- MODIFICAÇÃO 1: Adicionado estado para a porcentagem de desconto
     const [discountPercentage, setDiscountPercentage] = useState(order?.discountPercentage || 0);
 
 
@@ -652,7 +653,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         if (!order) { setSelectedServices([]); }
     }, [selectedClientId, clients, priceTables, services, order]);
 
-    // <-- MODIFICAÇÃO 2: Atualizado useEffect para calcular o total com desconto
     useEffect(() => {
         const subtotal = selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0);
         const discountValue = (subtotal * (parseFloat(discountPercentage) || 0)) / 100;
@@ -665,7 +665,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         }, 0);
         setCommissionValue(totalCommission);
 
-    }, [selectedServices, assignedEmployees, discountPercentage]); // <-- Adicionada dependência
+    }, [selectedServices, assignedEmployees, discountPercentage]);
 
     const handleAddEmployee = () => {
         if (!employeeToAdd || !commissionPercentageToAdd) {
@@ -725,7 +725,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         setEditingService(null);
     };
 
-    // <-- MODIFICAÇÃO 3: Atualizada função `handleSubmit` para salvar os dados de desconto
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!userId) return;
@@ -740,7 +739,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
         const finalServices = selectedServices.map(s => ({ ...s, quantity: Number(s.quantity) || 1, }));
         
-        // Novos cálculos para salvar
         const subtotal = finalServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
         const finalDiscountPercentage = parseFloat(discountPercentage) || 0;
         const discountAmount = (subtotal * finalDiscountPercentage) / 100;
@@ -772,7 +770,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             completionDate: completionDateValue,
             status: status,
             services: finalServices,
-            // Novos campos salvos no banco
             subtotal: subtotal,
             discountPercentage: finalDiscountPercentage,
             discountAmount: discountAmount,
@@ -956,7 +953,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     <Input label="Data de Conclusão" id="completionDate" type="date" ref={el => formRef.current.completionDate = el} defaultValue={order?.completionDate} />
                 </div>
                 
-                {/* <-- MODIFICAÇÃO 4: Adicionado campo de input para desconto */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-2">
                     <Input 
                         label="Desconto (%)" 
@@ -975,7 +971,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     <textarea id="observations" ref={el => formRef.current.observations = el} defaultValue={order?.observations} rows="3" className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500"></textarea>
                 </div>
                 
-                {/* <-- MODIFICAÇÃO 5: Atualizado resumo de totais para incluir subtotal e desconto */}
                 <div className="bg-neutral-800 p-4 rounded-lg text-right">
                     <p className="text-sm text-neutral-400">Subtotal: <span className="font-semibold">R$ {selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0).toFixed(2)}</span></p>
                     <p className="text-sm text-red-400">Desconto ({discountPercentage || 0}%): <span className="font-semibold">- R$ {((selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0) * (parseFloat(discountPercentage) || 0)) / 100).toFixed(2)}</span></p>
@@ -1179,12 +1174,9 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
         return matchesFilter && matchesSearch;
     });
     
-    // --- MODIFICAÇÃO 1: Adicionada a lógica para ordenar pela data de entrega ---
     const sortedOrders = filteredOrders.sort((a, b) => {
-        // Joga ordens sem data de entrega para o final da lista
         if (!a.deliveryDate) return 1;
         if (!b.deliveryDate) return -1;
-        // Ordena pela data mais próxima (ascendente)
         return new Date(a.deliveryDate) - new Date(b.deliveryDate);
     });
 
@@ -1217,7 +1209,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                             </tr>
                         </thead>
                         <tbody>
-                            {/* --- MODIFICAÇÃO 2: A tabela agora usa "sortedOrders" --- */}
                             {sortedOrders.map(order => (
                                 <tr key={order.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-neutral-800">
                                     <td className="px-6 py-4 font-medium text-white">#{order.number}</td><td className="px-6 py-4">{order.clientName}</td>
@@ -1239,7 +1230,6 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                             ))}
                         </tbody>
                     </table>
-                    {/* --- MODIFICAÇÃO 3: Verificação de lista vazia também usa "sortedOrders" --- */}
                     {sortedOrders.length === 0 && <p className="text-center p-8 text-neutral-500">Nenhuma ordem de serviço encontrada para este filtro.</p>}
                 </div>
             </div>
@@ -2599,9 +2589,10 @@ const LoginScreen = () => {
                 const userDocRef = doc(db, "users", user.uid);
                 const userDoc = await getDoc(userDocRef);
 
-                if (!userDoc.exists() || userDoc.data().status !== 'approved') {
+                // --- MODIFICADO --- Aceita login de utilizadores "user" ou "admin", mas rejeita "client"
+                if (!userDoc.exists() || userDoc.data().status !== 'approved' || userDoc.data().role === 'client') {
                     await signOut(auth);
-                    setError("A sua conta está pendente de aprovação ou não foi encontrada.");
+                    setError("A sua conta está pendente de aprovação, não foi encontrada ou é uma conta de cliente.");
                 }
             } catch (err) {
                 setError("E-mail ou senha incorretos.");
@@ -2616,7 +2607,7 @@ const LoginScreen = () => {
                     email: user.email,
                     uid: user.uid,
                     status: 'pending',
-                    role: 'user',
+                    role: 'user', // --- Utilizadores padrão se registam como 'user'
                     createdAt: serverTimestamp()
                 });
 
@@ -2734,6 +2725,388 @@ const LoginScreen = () => {
     );
 };
 
+// --- NOVO --- Componente de gestão de acesso para o cliente
+const ClientAccessModal = ({ client, onClose }) => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [clientUser, setClientUser] = useState(null);
+    const ownerId = auth.currentUser.uid;
+
+    useEffect(() => {
+        const checkExistingAccess = async () => {
+            setLoading(true);
+            const usersRef = collection(db, "users");
+            const q = query(usersRef, where("clientId", "==", client.id), where("ownerId", "==", ownerId));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+                const userData = querySnapshot.docs[0].data();
+                setClientUser(userData);
+                setEmail(userData.email);
+            }
+            setLoading(false);
+        };
+        checkExistingAccess();
+    }, [client.id, ownerId]);
+
+    const handleCreateAccess = async (e) => {
+        e.preventDefault();
+        if (!email || !password) {
+            setError("Email e senha são obrigatórios.");
+            return;
+        }
+        setLoading(true);
+        setError('');
+
+        try {
+            // Cria um novo 'auth' instance temporário para não deslogar o admin
+            const tempApp = initializeApp(firebaseConfig, `temp-app-${new Date().getTime()}`);
+            const tempAuth = getAuth(tempApp);
+
+            const userCredential = await createUserWithEmailAndPassword(tempAuth, email, password);
+            const newUser = userCredential.user;
+
+            await setDoc(doc(db, "users", newUser.uid), {
+                email: newUser.email,
+                uid: newUser.uid,
+                role: 'client',
+                status: 'approved',
+                ownerId: ownerId,
+                clientId: client.id,
+                createdAt: serverTimestamp()
+            });
+
+            setClientUser({ email });
+            alert("Acesso criado com sucesso para o cliente!");
+            setPassword('');
+        } catch (error) {
+            if (error.code === 'auth/email-already-in-use') {
+                setError('Este email já está em uso. Por favor, escolha outro.');
+            } else {
+                setError('Ocorreu um erro ao criar o acesso.');
+                console.error("Erro ao criar utilizador cliente:", error);
+            }
+        }
+        setLoading(false);
+    };
+
+    const handlePasswordReset = async () => {
+        if (!clientUser?.email) {
+            setError('Nenhum email associado a este cliente.');
+            return;
+        }
+        setLoading(true);
+        setError('');
+        try {
+            await sendPasswordResetEmail(auth, clientUser.email);
+            alert('Email de redefinição de senha enviado para o cliente.');
+        } catch (error) {
+            setError('Falha ao enviar o email de redefinição.');
+            console.error(error);
+        }
+        setLoading(false);
+    };
+
+    return (
+        <Modal onClose={onClose} title={`Gerir Acesso do Cliente: ${client.name}`}>
+            {loading ? (
+                <p>A verificar acesso...</p>
+            ) : clientUser ? (
+                <div className="space-y-4">
+                    <p className="text-lg text-green-400">Este cliente já possui acesso.</p>
+                    <Input label="Email de Acesso" value={clientUser.email} disabled />
+                    <Button onClick={handlePasswordReset} variant="secondary">
+                        Enviar Email de Redefinição de Senha
+                    </Button>
+                    {error && <p className="text-red-400 text-sm">{error}</p>}
+                </div>
+            ) : (
+                <form onSubmit={handleCreateAccess} className="space-y-4">
+                    <p className="text-neutral-300">Crie as credenciais de acesso para este cliente.</p>
+                    <Input label="Email do Cliente" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+                    <Input label="Senha Temporária" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                    {error && <p className="text-red-400 text-sm">{error}</p>}
+                    <div className="flex justify-end gap-3 pt-4">
+                        <Button type="button" onClick={onClose} variant="secondary">Cancelar</Button>
+                        <Button type="submit" disabled={loading}>
+                            {loading ? 'A criar...' : 'Criar Acesso'}
+                        </Button>
+                    </div>
+                </form>
+            )}
+        </Modal>
+    );
+};
+
+
+// --- NOVO --- Componente de Upload e listagem de arquivos
+const FileManager = ({ ownerId, clientId, orderId }) => {
+    const [files, setFiles] = useState([]);
+    const [uploading, setUploading] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const fileInputRef = useRef(null);
+
+    const storagePath = `artifacts/${appId}/users/${ownerId}/clients/${clientId}/orders/${orderId}`;
+    const filesListRef = ref(storage, storagePath);
+
+    const fetchFiles = () => {
+        listAll(filesListRef)
+            .then((res) => {
+                const promises = res.items.map((itemRef) =>
+                    getDownloadURL(itemRef).then((url) => ({
+                        name: itemRef.name,
+                        url: url,
+                    }))
+                );
+                return Promise.all(promises);
+            })
+            .then((fileList) => {
+                setFiles(fileList);
+            })
+            .catch((error) => console.error("Erro ao listar arquivos:", error));
+    };
+
+    useEffect(() => {
+        fetchFiles();
+    }, [orderId]);
+
+    const handleUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const storageRef = ref(storage, `${storagePath}/${file.name}`);
+        const uploadTask = uploadBytesResumable(storageRef, file);
+
+        setUploading(true);
+
+        uploadTask.on(
+            'state_changed',
+            (snapshot) => {
+                const prog = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                setProgress(prog);
+            },
+            (error) => {
+                console.error("Erro no upload:", error);
+                setUploading(false);
+            },
+            () => {
+                fetchFiles();
+                setUploading(false);
+                setProgress(0);
+            }
+        );
+    };
+    
+    return (
+        <div className="bg-neutral-800 p-4 rounded-lg mt-6">
+            <h3 className="text-lg font-medium text-white mb-3">Ficheiros e Documentos</h3>
+            <div className="mb-4">
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleUpload}
+                    className="hidden"
+                />
+                <Button onClick={() => fileInputRef.current.click()} disabled={uploading}>
+                    <LucideUpload size={18} />
+                    {uploading ? `A enviar... ${progress}%` : 'Carregar Ficheiro'}
+                </Button>
+                {uploading && (
+                    <div className="w-full bg-neutral-600 rounded-full h-2.5 mt-2">
+                        <div className="bg-yellow-500 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
+                    </div>
+                )}
+            </div>
+
+            <div className="space-y-2">
+                {files.length > 0 ? (
+                    files.map(file => (
+                        <div key={file.name} className="flex justify-between items-center bg-neutral-900 p-2 rounded-md border border-neutral-700">
+                            <div className="flex items-center gap-2">
+                                <LucidePaperclip size={16} className="text-neutral-400"/>
+                                <span className="text-sm">{file.name}</span>
+                            </div>
+                            <a href={file.url} target="_blank" rel="noopener noreferrer" className="p-1 text-yellow-500 hover:text-yellow-400" title="Ver ficheiro">
+                                <LucideEye size={18} />
+                            </a>
+                        </div>
+                    ))
+                ) : (
+                    <p className="text-sm text-neutral-500 text-center py-2">Nenhum ficheiro carregado.</p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+// --- NOVO --- Layout e componentes para o Portal do Cliente
+const ClientPortalLayout = ({ user, userProfile }) => {
+    const [orders, setOrders] = useState([]);
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [companyProfile, setCompanyProfile] = useState(null);
+
+    useEffect(() => {
+        if (!userProfile) return;
+
+        // Carregar as Ordens de Serviço do cliente
+        const ordersQuery = query(
+            collection(db, `artifacts/${appId}/users/${userProfile.ownerId}/serviceOrders`),
+            where("clientId", "==", userProfile.clientId),
+            orderBy("number", "desc")
+        );
+        const unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
+            const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setOrders(ordersData);
+        });
+
+        // Carregar o perfil da empresa (laboratório) para exibir o nome
+        const companyProfileDocRef = doc(db, `artifacts/${appId}/users/${userProfile.ownerId}/companyProfile/main`);
+        const unsubscribeProfile = onSnapshot(companyProfileDocRef, (doc) => {
+            setCompanyProfile(doc.data());
+        });
+
+        return () => {
+            unsubscribeOrders();
+            unsubscribeProfile();
+        };
+    }, [userProfile]);
+
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+        } catch (error) {
+            console.error("Error signing out:", error);
+        }
+    };
+
+    const getStatusClasses = (status) => {
+        switch (status) {
+            case 'Concluído': return 'bg-green-100 text-green-800';
+            case 'Pendente': return 'bg-yellow-100 text-yellow-800';
+            case 'Em Andamento': return 'bg-blue-100 text-blue-800';
+            case 'Cancelado': return 'bg-red-100 text-red-800';
+            default: return 'bg-neutral-100 text-neutral-800';
+        }
+    };
+
+
+    if (selectedOrder) {
+        return (
+            <div className="bg-black min-h-screen text-white p-6 md:p-10">
+                <div className="max-w-4xl mx-auto">
+                    <Button onClick={() => setSelectedOrder(null)} variant="secondary" className="mb-4">
+                        &larr; Voltar para a lista
+                    </Button>
+                    <div className="bg-neutral-900 rounded-2xl p-6">
+                         <div className="border-b-2 pb-4 mb-4 border-neutral-700">
+                            <h2 className="text-2xl font-bold text-yellow-500">Detalhes do Pedido #{selectedOrder.number}</h2>
+                            <p className="text-sm text-neutral-400">Paciente: {selectedOrder.patientName}</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div>
+                                <h3 className="font-bold text-neutral-300 mb-2 border-b border-neutral-600 pb-1">Datas</h3>
+                                <p><strong>Abertura:</strong> {new Date(selectedOrder.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
+                                <p><strong>Prev. Entrega:</strong> {new Date(selectedOrder.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
+                                <p><strong>Conclusão:</strong> {selectedOrder.completionDate ? new Date(selectedOrder.completionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '---'}</p>
+                            </div>
+                             <div className="text-left md:text-right">
+                                <h3 className="font-bold text-neutral-300 mb-2 border-b border-neutral-600 pb-1">Status</h3>
+                                <p>
+                                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusClasses(selectedOrder.status)}`}>
+                                        {selectedOrder.status}
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
+                         <div>
+                            <h3 className="font-bold text-neutral-300 mb-2 border-b border-neutral-600 pb-1">Serviços Solicitados</h3>
+                            <ul className="list-disc list-inside text-neutral-300">
+                                {selectedOrder.services.map(s => <li key={s.id}>{s.name}</li>)}
+                            </ul>
+                        </div>
+                         <div className="mt-6">
+                            <h3 className="font-bold text-neutral-300 mb-2 border-b border-neutral-600 pb-1">Observações</h3>
+                            <p className="text-sm italic text-neutral-400">{selectedOrder.observations || 'Nenhuma observação.'}</p>
+                        </div>
+                        {/* --- NOVO --- Componente de ficheiros integrado --- */}
+                        <FileManager 
+                            ownerId={userProfile.ownerId}
+                            clientId={userProfile.clientId}
+                            orderId={selectedOrder.id}
+                        />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    
+
+    return (
+        <div className="bg-black min-h-screen text-white">
+            <header className="bg-neutral-900 shadow-lg">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex justify-between items-center h-20 border-b border-neutral-800">
+                         <div className="flex items-center">
+                            <LucideClipboardEdit className="h-8 w-8 text-yellow-500" />
+                            <h1 className="text-xl font-bold text-white ml-2">{companyProfile?.companyName || 'Portal do Cliente'}</h1>
+                        </div>
+                        <Button onClick={handleLogout} variant="secondary" className="text-sm">
+                            <LucideLogOut size={16}/> Sair
+                        </Button>
+                    </div>
+                </div>
+            </header>
+            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <h2 className="text-3xl font-bold text-white mb-6">Meus Pedidos</h2>
+                 <div className="bg-neutral-900 rounded-2xl shadow-md overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left text-neutral-400">
+                            <thead className="text-xs text-neutral-300 uppercase bg-neutral-800">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3">Nº Pedido</th>
+                                    <th scope="col" className="px-6 py-3">Paciente</th>
+                                    <th scope="col" className="px-6 py-3">Data Entrega</th>
+                                    <th scope="col" className="px-6 py-3">Status</th>
+                                    <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                                </tr>
+                            </thead>
+                             <tbody>
+                                {orders.map(order => (
+                                    <tr key={order.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-neutral-800">
+                                        <td className="px-6 py-4 font-medium text-white">#{order.number}</td>
+                                        <td className="px-6 py-4">{order.patientName}</td>
+                                        <td className="px-6 py-4">{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'N/A'}</td>
+                                        <td className="px-6 py-4">
+                                             <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusClasses(order.status)}`}>
+                                                {order.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <Button onClick={() => setSelectedOrder(order)} variant="secondary" className="text-xs py-1 px-2">
+                                                Ver Detalhes
+                                            </Button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {orders.length === 0 && (
+                                    <tr>
+                                        <td colSpan="5" className="p-8 text-center text-neutral-500">
+                                            Nenhum pedido encontrado.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+};
+
+
 const AppLayout = ({ user, userProfile }) => {
     const [activePage, setActivePage] = useState('dashboard');
     const [clients, setClients] = useState([]);
@@ -2743,8 +3116,11 @@ const AppLayout = ({ user, userProfile }) => {
     const [priceTables, setPriceTables] = useState([]);
     const [inventory, setInventory] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
-    const [expenses, setExpenses] = useState([]); // --- ADICIONADO: Estado para despesas
+    const [expenses, setExpenses] = useState([]);
     const [companyProfile, setCompanyProfile] = useState(null);
+    // --- NOVO --- Estado para gerir o modal de acesso do cliente
+    const [isAccessModalOpen, setAccessModalOpen] = useState(false);
+    const [selectedClientForAccess, setSelectedClientForAccess] = useState(null);
 
     useEffect(() => {
         if (!user) return;
@@ -2756,7 +3132,7 @@ const AppLayout = ({ user, userProfile }) => {
             priceTables: setPriceTables,
             inventory: setInventory,
             suppliers: setSuppliers,
-            expenses: setExpenses, // --- ADICIONADO: Carregamento de despesas
+            expenses: setExpenses,
         };
         const unsubscribers = Object.entries(collections).map(([name, setter]) => {
             const q = query(collection(db, `artifacts/${appId}/users/${user.uid}/${name}`));
@@ -2785,43 +3161,68 @@ const AppLayout = ({ user, userProfile }) => {
             console.error("Error signing out:", error);
         }
     };
+    
+    // --- NOVO --- Funções para controlar o modal de acesso
+    const handleOpenAccessModal = (client) => {
+        setSelectedClientForAccess(client);
+        setAccessModalOpen(true);
+    };
+
+    const handleCloseAccessModal = () => {
+        setSelectedClientForAccess(null);
+        setAccessModalOpen(false);
+    };
+
 
     const renderPage = () => {
         switch (activePage) {
             case 'dashboard':
                 return <Dashboard setActivePage={setActivePage} serviceOrders={serviceOrders} inventory={inventory} />;
             case 'clients':
-                return <ManageGeneric
-                    collectionName="clients"
-                    title="Clientes"
-                    fields={[
-                        { name: 'name', label: 'Nome Completo', type: 'text', required: true },
-                        { name: 'document', label: 'CPF/CNPJ', type: 'text' },
-                        { name: 'address', label: 'Endereço', type: 'text' },
-                        { name: 'phone', label: 'Telefone / WhatsApp', type: 'tel' },
-                        { name: 'email', label: 'Email', type: 'email' },
-                        { name: 'priceTableId', label: 'Tabela de Preço', type: 'select', optionsKey: 'priceTables', placeholder: 'Padrão' },
-                        { name: 'notes', label: 'Observações', type: 'textarea' },
-                    ]}
-                    customProps={{ priceTables }}
-                    renderItem={(items, onEdit, onDelete) => (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-                            {items.map(item => (
-                                <div key={item.id} className="bg-neutral-800 rounded-lg p-4 shadow-sm border border-neutral-700 flex flex-col justify-between">
-                                    <div>
-                                        <h3 className="font-bold text-lg text-white">{item.name}</h3>
-                                        <p className="text-sm text-neutral-400">{item.phone}</p>
-                                        <p className="text-sm text-neutral-400 truncate">{priceTables.find(pt => pt.id === item.priceTableId)?.name || 'Preço Padrão'}</p>
-                                    </div>
-                                    <div className="flex justify-end gap-2 mt-4">
-                                        <button onClick={() => onEdit(item)} className="p-2 text-blue-400 hover:bg-blue-900 rounded-full"><LucideEdit size={18} /></button>
-                                        <button onClick={() => onDelete(item.id)} className="p-2 text-red-500 hover:bg-red-900 rounded-full"><LucideTrash2 size={18} /></button>
-                                    </div>
+                return (
+                    <>
+                        <ManageGeneric
+                            collectionName="clients"
+                            title="Clientes"
+                            fields={[
+                                { name: 'name', label: 'Nome Completo', type: 'text', required: true },
+                                { name: 'document', label: 'CPF/CNPJ', type: 'text' },
+                                { name: 'address', label: 'Endereço', type: 'text' },
+                                { name: 'phone', label: 'Telefone / WhatsApp', type: 'tel' },
+                                { name: 'email', label: 'Email', type: 'email' },
+                                { name: 'priceTableId', label: 'Tabela de Preço', type: 'select', optionsKey: 'priceTables', placeholder: 'Padrão' },
+                                { name: 'notes', label: 'Observações', type: 'textarea' },
+                            ]}
+                            customProps={{ priceTables }}
+                            renderItem={(items, onEdit, onDelete) => (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                                    {items.map(item => (
+                                        <div key={item.id} className="bg-neutral-800 rounded-lg p-4 shadow-sm border border-neutral-700 flex flex-col justify-between">
+                                            <div>
+                                                <h3 className="font-bold text-lg text-white">{item.name}</h3>
+                                                <p className="text-sm text-neutral-400">{item.phone}</p>
+                                                <p className="text-sm text-neutral-400 truncate">{priceTables.find(pt => pt.id === item.priceTableId)?.name || 'Preço Padrão'}</p>
+                                            </div>
+                                            <div className="flex justify-end gap-2 mt-4">
+                                                {/* --- NOVO --- Botão para gerir acesso */}
+                                                <button onClick={() => handleOpenAccessModal(item)} className="p-2 text-yellow-500 hover:bg-yellow-900 rounded-full" title="Gerir Acesso ao Portal"><LucideKeyRound size={18} /></button>
+                                                <button onClick={() => onEdit(item)} className="p-2 text-blue-400 hover:bg-blue-900 rounded-full" title="Editar Cliente"><LucideEdit size={18} /></button>
+                                                <button onClick={() => onDelete(item.id)} className="p-2 text-red-500 hover:bg-red-900 rounded-full" title="Excluir Cliente"><LucideTrash2 size={18} /></button>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                />;
+                            )}
+                        />
+                        {/* --- NOVO --- Renderização do modal de acesso */}
+                        {isAccessModalOpen && selectedClientForAccess && (
+                            <ClientAccessModal 
+                                client={selectedClientForAccess}
+                                onClose={handleCloseAccessModal}
+                            />
+                        )}
+                    </>
+                );
             case 'employees':
                 return <ManageGeneric
                     collectionName="employees"
@@ -2993,7 +3394,6 @@ const AppLayout = ({ user, userProfile }) => {
             case 'service-orders':
                 return <ServiceOrders userId={user.uid} services={services} clients={clients} employees={employees} orders={serviceOrders} priceTables={priceTables} />;
 
-            // --- ROTAS FINANCEIRAS ATUALIZADAS ---
             case 'financials':
                 return <FinancialDashboard orders={serviceOrders} expenses={expenses} setActivePage={setActivePage} />;
             case 'financials-payable':
@@ -3031,7 +3431,6 @@ const AppLayout = ({ user, userProfile }) => {
         )
     };
     
-    // --- NOVO COMPONENTE: DROPDOWN FINANCEIRO ---
     const FinancialNav = ({ activePage, setActivePage }) => {
         const [isOpen, setIsOpen] = useState(false);
         const isFinancialPage = activePage.startsWith('financials');
@@ -3070,7 +3469,6 @@ const AppLayout = ({ user, userProfile }) => {
                             <NavItem icon={<LucideBarChart3 />} label="Painel" page="dashboard" activePage={activePage} setActivePage={setActivePage} />
                             <NavItem icon={<LucideListOrdered />} label="Ordens de Serviço" page="service-orders" activePage={activePage} setActivePage={setActivePage} />
                             
-                            {/* --- MENU FINANCEIRO ATUALIZADO --- */}
                             <FinancialNav activePage={activePage} setActivePage={setActivePage} />
 
                             <NavItem icon={<LucideUsers />} label="Clientes" page="clients" activePage={activePage} setActivePage={setActivePage} />
@@ -3117,6 +3515,7 @@ export default function App() {
                         setUser(user);
                         setUserProfile(userDoc.data());
                     } else {
+                        // Se o utilizador não for aprovado, ou o documento não existir, desloga-o.
                         await signOut(auth);
                         setUser(null);
                         setUserProfile(null);
@@ -3157,10 +3556,22 @@ export default function App() {
       `}</style>
     );
 
+    // --- MODIFICADO --- Lógica de renderização principal para distinguir entre admin/utilizador e cliente
+    const renderContent = () => {
+        if (user && userProfile) {
+            if (userProfile.role === 'client') {
+                return <ClientPortalLayout user={user} userProfile={userProfile} />;
+            }
+            // Para 'admin' ou 'user'
+            return <AppLayout user={user} userProfile={userProfile} />;
+        }
+        return <LoginScreen />;
+    };
+
     return (
         <>
             <GlobalStyles />
-            {user ? <AppLayout user={user} userProfile={userProfile} /> : <LoginScreen />}
+            {renderContent()}
         </>
     );
 }
