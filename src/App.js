@@ -2563,7 +2563,6 @@ const FinancialDashboard = ({ orders, expenses, setActivePage }) => {
     );
 };
 
-// --- CORRIGIDO --- Componente LoginScreen atualizado para permitir login de clientes
 const LoginScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [isPasswordReset, setIsPasswordReset] = useState(false);
@@ -2586,20 +2585,15 @@ const LoginScreen = () => {
                 const userDocRef = doc(db, "users", user.uid);
                 const userDoc = await getDoc(userDocRef);
 
-                // --- MODIFICAÇÃO CHAVE ---
-                // Removemos a verificação 'userDoc.data().role === 'client''
-                // Agora, qualquer utilizador aprovado pode fazer login aqui.
-                // A lógica de qual tela mostrar fica no componente <App />.
                 if (!userDoc.exists() || userDoc.data().status !== 'approved') {
                     await signOut(auth);
                     setError("A sua conta está pendente de aprovação ou não foi encontrada.");
                 }
-                // Se o login for bem-sucedido e o utilizador for aprovado, o onAuthStateChanged no App.js tratará do resto.
 
             } catch (err) {
                 setError("E-mail ou senha incorretos.");
             }
-        } else { // Lógica de registo (apenas para administradores/utilizadores)
+        } else { 
             try {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
@@ -2609,7 +2603,7 @@ const LoginScreen = () => {
                     email: user.email,
                     uid: user.uid,
                     status: 'pending',
-                    role: 'user', // Novos registos são 'user'
+                    role: 'user', 
                     createdAt: serverTimestamp()
                 });
 
@@ -2727,7 +2721,6 @@ const LoginScreen = () => {
     );
 };
 
-
 const ClientAccessModal = ({ client, onClose }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -2762,7 +2755,6 @@ const ClientAccessModal = ({ client, onClose }) => {
         setError('');
 
         try {
-            // Cria um novo 'auth' instance temporário para não deslogar o admin
             const tempApp = initializeApp(firebaseConfig, `temp-app-${new Date().getTime()}`);
             const tempAuth = getAuth(tempApp);
 
@@ -2942,6 +2934,7 @@ const FileManager = ({ ownerId, clientId, orderId }) => {
 };
 
 
+// --- CORRIGIDO --- Componente ClientPortalLayout com a consulta ao banco de dados ajustada
 const ClientPortalLayout = ({ user, userProfile }) => {
     const [orders, setOrders] = useState([]);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -2950,18 +2943,23 @@ const ClientPortalLayout = ({ user, userProfile }) => {
     useEffect(() => {
         if (!userProfile) return;
 
-        // Carregar as Ordens de Serviço do cliente
+        // --- INÍCIO DA CORREÇÃO ---
+        // 1. A consulta agora filtra APENAS pelo `clientId`, sem o `orderBy`.
         const ordersQuery = query(
             collection(db, `artifacts/${appId}/users/${userProfile.ownerId}/serviceOrders`),
-            where("clientId", "==", userProfile.clientId),
-            orderBy("number", "desc")
+            where("clientId", "==", userProfile.clientId)
         );
+
         const unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
             const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // 2. A ordenação é feita aqui, no código, depois que os dados são recebidos.
+            ordersData.sort((a, b) => (b.number || 0) - (a.number || 0));
+            
             setOrders(ordersData);
         });
+        // --- FIM DA CORREÇÃO ---
 
-        // Carregar o perfil da empresa (laboratório) para exibir o nome
         const companyProfileDocRef = doc(db, `artifacts/${appId}/users/${userProfile.ownerId}/companyProfile/main`);
         const unsubscribeProfile = onSnapshot(companyProfileDocRef, (doc) => {
             setCompanyProfile(doc.data());
