@@ -1909,6 +1909,7 @@ const PriceTables = ({ userId, services, companyProfile }) => {
     );
 };
 
+// --- MODIFICADO --- Componente UserManagement com as novas funcionalidades
 const UserManagement = ({ userId }) => {
     const [users, setUsers] = useState([]);
     const usersCollectionRef = collection(db, "users");
@@ -1925,10 +1926,24 @@ const UserManagement = ({ userId }) => {
         const userDocRef = doc(db, "users", targetUserId);
         try {
             await updateDoc(userDocRef, { status: newStatus });
-            alert(`Status do usuário atualizado para ${newStatus}`);
+            alert(`Status do utilizador atualizado para ${newStatus}`);
         } catch (error) {
-            console.error("Erro ao atualizar status do usuário: ", error);
+            console.error("Erro ao atualizar status do utilizador: ", error);
             alert("Falha ao atualizar o status.");
+        }
+    };
+
+    // --- NOVO --- Função para excluir um utilizador (apenas do Firestore)
+    const handleDeleteUser = async (targetUserId) => {
+        if (window.confirm('Tem certeza que deseja EXCLUIR este utilizador permanentemente? Esta ação não pode ser desfeita e removerá o seu acesso.')) {
+            try {
+                const userDocRef = doc(db, "users", targetUserId);
+                await deleteDoc(userDocRef);
+                alert('Utilizador excluído com sucesso.');
+            } catch (error) {
+                console.error("Erro ao excluir utilizador:", error);
+                alert('Ocorreu uma falha ao excluir o utilizador.');
+            }
         }
     };
 
@@ -1940,7 +1955,7 @@ const UserManagement = ({ userId }) => {
                     <thead className="text-xs text-neutral-300 uppercase bg-neutral-800">
                         <tr>
                             <th scope="col" className="px-6 py-3">Email</th>
-                            <th scope="col" className="px-6 py-3">Data de Registo</th>
+                            <th scope="col" className="px-6 py-3">Tipo</th>
                             <th scope="col" className="px-6 py-3">Status</th>
                             <th scope="col" className="px-6 py-3 text-center">Ações</th>
                         </tr>
@@ -1949,24 +1964,33 @@ const UserManagement = ({ userId }) => {
                         {users.map(user => (
                             <tr key={user.id} className="bg-neutral-900 border-b border-neutral-800 hover:bg-neutral-800">
                                 <td className="px-6 py-4 font-medium text-white">{user.email}</td>
-                                <td className="px-6 py-4">{user.createdAt?.toDate().toLocaleDateString('pt-BR') || 'N/A'}</td>
+                                <td className="px-6 py-4">{user.role || 'N/A'}</td>
                                 <td className="px-6 py-4">
                                     <span className={`px-3 py-1 text-sm font-medium rounded-full ${user.status === 'approved' ? 'bg-green-100 text-green-800' :
                                         user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                                             'bg-red-100 text-red-800'
-                                        }`}>{user.status === 'approved' ? 'Aprovado' : 'Pendente'}</span>
+                                        }`}>{user.status === 'approved' ? 'Aprovado' : 'Pendente/Revogado'}</span>
                                 </td>
                                 <td className="px-6 py-4 text-center">
-                                    {user.status === 'pending' && (
-                                        <Button onClick={() => handleStatusChange(user.id, 'approved')}>
-                                            Aprovar
-                                        </Button>
-                                    )}
-                                    {user.status === 'approved' && user.role !== 'admin' && (
-                                        <Button onClick={() => handleStatusChange(user.id, 'pending')} variant="secondary">
-                                            Revogar Acesso
-                                        </Button>
-                                    )}
+                                    <div className="flex items-center justify-center gap-2">
+                                        {/* --- MODIFICADO --- Lógica dos botões de ação */}
+                                        {user.status === 'pending' && user.role !== 'admin' && (
+                                            <Button onClick={() => handleStatusChange(user.id, 'approved')} className="text-xs py-1 px-2">
+                                                Aprovar
+                                            </Button>
+                                        )}
+                                        {user.status === 'approved' && user.role !== 'admin' && (
+                                            <Button onClick={() => handleStatusChange(user.id, 'pending')} variant="secondary" className="text-xs py-1 px-2">
+                                                Revogar
+                                            </Button>
+                                        )}
+                                        {/* --- NOVO --- Botão para excluir, com condição para não se excluir a si mesmo */}
+                                        {user.id !== userId && user.role !== 'admin' && (
+                                             <Button onClick={() => handleDeleteUser(user.id)} variant="danger" className="text-xs py-1 px-2">
+                                                Excluir
+                                            </Button>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -1976,6 +2000,7 @@ const UserManagement = ({ userId }) => {
         </div>
     );
 };
+
 
 const ClientAccounts = ({ userId, clients, orders, setActivePage }) => {
     const [accounts, setAccounts] = useState([]);
@@ -2724,7 +2749,7 @@ const LoginScreen = () => {
 const ClientAccessModal = ({ client, onClose }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true); // --- MODIFICADO --- Inicia como true
     const [error, setError] = useState('');
     const [clientUser, setClientUser] = useState(null);
     const ownerId = auth.currentUser.uid;
@@ -2732,13 +2757,18 @@ const ClientAccessModal = ({ client, onClose }) => {
     useEffect(() => {
         const checkExistingAccess = async () => {
             setLoading(true);
-            const usersRef = collection(db, "users");
-            const q = query(usersRef, where("clientId", "==", client.id), where("ownerId", "==", ownerId));
-            const querySnapshot = await getDocs(q);
-            if (!querySnapshot.empty) {
-                const userData = querySnapshot.docs[0].data();
-                setClientUser(userData);
-                setEmail(userData.email);
+            try {
+                const usersRef = collection(db, "users");
+                const q = query(usersRef, where("clientId", "==", client.id), where("ownerId", "==", ownerId));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty) {
+                    const userData = querySnapshot.docs[0].data();
+                    setClientUser(userData);
+                    setEmail(userData.email);
+                }
+            } catch (err) {
+                console.error("Erro ao verificar acesso do cliente:", err);
+                setError("Ocorreu um erro ao verificar o acesso. Verifique as regras de segurança.");
             }
             setLoading(false);
         };
@@ -2933,8 +2963,6 @@ const FileManager = ({ ownerId, clientId, orderId }) => {
     );
 };
 
-
-// --- CORRIGIDO --- Componente ClientPortalLayout com a consulta ao banco de dados ajustada
 const ClientPortalLayout = ({ user, userProfile }) => {
     const [orders, setOrders] = useState([]);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -2943,8 +2971,6 @@ const ClientPortalLayout = ({ user, userProfile }) => {
     useEffect(() => {
         if (!userProfile) return;
 
-        // --- INÍCIO DA CORREÇÃO ---
-        // 1. A consulta agora filtra APENAS pelo `clientId`, sem o `orderBy`.
         const ordersQuery = query(
             collection(db, `artifacts/${appId}/users/${userProfile.ownerId}/serviceOrders`),
             where("clientId", "==", userProfile.clientId)
@@ -2953,16 +2979,18 @@ const ClientPortalLayout = ({ user, userProfile }) => {
         const unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
             const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
-            // 2. A ordenação é feita aqui, no código, depois que os dados são recebidos.
             ordersData.sort((a, b) => (b.number || 0) - (a.number || 0));
             
             setOrders(ordersData);
+        }, (error) => {
+            console.error("Erro ao carregar as ordens de serviço do cliente:", error);
         });
-        // --- FIM DA CORREÇÃO ---
 
         const companyProfileDocRef = doc(db, `artifacts/${appId}/users/${userProfile.ownerId}/companyProfile/main`);
         const unsubscribeProfile = onSnapshot(companyProfileDocRef, (doc) => {
             setCompanyProfile(doc.data());
+        }, (error) => {
+            console.error("Erro ao carregar o perfil da empresa:", error);
         });
 
         return () => {
