@@ -1230,9 +1230,12 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
             </div>
 
             {isModalOpen && <OrderFormModal onClose={handleCloseModal} order={currentOrder} userId={userId} services={services} clients={clients} employees={employees} orders={orders} priceTables={priceTables} />}
+            
+            {/* --- INÍCIO DA MODIFICAÇÃO --- */}
             {isViewModalOpen && (
-                <Modal onClose={handleCloseModal} title={`Detalhes da O.S. #${currentOrder?.number}`}>
+                <Modal onClose={handleCloseModal} title={`Detalhes da O.S. #${currentOrder?.number}`} size="4xl">
                     <div ref={printRef} className="p-4 bg-white text-neutral-800">
+                        {/* O conteúdo para impressão permanece o mesmo */}
                         <div className="border-b-2 pb-4 mb-4 border-neutral-200">
                             <h2 className="text-2xl font-bold text-yellow-500">Ordem de Serviço #{currentOrder.number}</h2>
                             <p className="text-sm text-neutral-500">Data de Abertura: {new Date(currentOrder.openDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
@@ -1296,15 +1299,28 @@ const ServiceOrders = ({ userId, services, clients, employees, orders, priceTabl
                             </div>
                         </div>
                     </div>
-                    <footer className="flex justify-end gap-3 pt-4 border-t border-neutral-700 mt-4 p-4">
+
+                    {/* --- NOVO --- Adição do FileManager fora da área de impressão */}
+                    <div className="mt-4 p-4 border-t border-neutral-700">
+                        <FileManager 
+                            ownerId={userId}
+                            clientId={currentOrder.clientId}
+                            orderId={currentOrder.id}
+                        />
+                    </div>
+                    
+                    <footer className="flex justify-end gap-3 pt-4 border-t border-neutral-700 p-4">
                         <Button onClick={handleSaveAsPdf} variant="secondary"><LucideFileDown size={18} /> Salvar PDF</Button>
                         <Button onClick={handlePrint} variant="primary"><LucidePrinter size={18} /> Imprimir</Button>
                     </footer>
                 </Modal>
             )}
+             {/* --- FIM DA MODIFICAÇÃO --- */}
         </div>
     );
 };
+// --- FIM DA MODIFICAÇÃO NO COMPONENTE ---
+
 
 const Reports = ({ orders, employees, clients }) => {
     const [reportType, setReportType] = useState('completedByPeriod');
@@ -1909,7 +1925,6 @@ const PriceTables = ({ userId, services, companyProfile }) => {
     );
 };
 
-// --- MODIFICADO --- Componente UserManagement com as novas funcionalidades
 const UserManagement = ({ userId }) => {
     const [users, setUsers] = useState([]);
     const usersCollectionRef = collection(db, "users");
@@ -1933,7 +1948,6 @@ const UserManagement = ({ userId }) => {
         }
     };
 
-    // --- NOVO --- Função para excluir um utilizador (apenas do Firestore)
     const handleDeleteUser = async (targetUserId) => {
         if (window.confirm('Tem certeza que deseja EXCLUIR este utilizador permanentemente? Esta ação não pode ser desfeita e removerá o seu acesso.')) {
             try {
@@ -1973,7 +1987,6 @@ const UserManagement = ({ userId }) => {
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                     <div className="flex items-center justify-center gap-2">
-                                        {/* --- MODIFICADO --- Lógica dos botões de ação */}
                                         {user.status === 'pending' && user.role !== 'admin' && (
                                             <Button onClick={() => handleStatusChange(user.id, 'approved')} className="text-xs py-1 px-2">
                                                 Aprovar
@@ -1984,7 +1997,6 @@ const UserManagement = ({ userId }) => {
                                                 Revogar
                                             </Button>
                                         )}
-                                        {/* --- NOVO --- Botão para excluir, com condição para não se excluir a si mesmo */}
                                         {user.id !== userId && user.role !== 'admin' && (
                                              <Button onClick={() => handleDeleteUser(user.id)} variant="danger" className="text-xs py-1 px-2">
                                                 Excluir
@@ -2749,7 +2761,7 @@ const LoginScreen = () => {
 const ClientAccessModal = ({ client, onClose }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(true); // --- MODIFICADO --- Inicia como true
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [clientUser, setClientUser] = useState(null);
     const ownerId = auth.currentUser.uid;
