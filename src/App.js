@@ -594,6 +594,13 @@ const AccountsPayable = () => {
 };
 
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
+    // --- MODIFICAÇÃO: Cálculo do número da O.S. antes de salvar ---
+    const nextOrderNumber = useMemo(() => {
+        if (order && order.number) return order.number; // Se for edição, mantém o número original
+        const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
+        return lastOrderNumber + 1;
+    }, [order, orders]);
+
     const [selectedClientId, setSelectedClientId] = useState(order?.clientId || '');
     const [availableServices, setAvailableServices] = useState({});
 
@@ -616,9 +623,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     const [commissionPercentageToAdd, setCommissionPercentageToAdd] = useState('');
     const [selectedMaterial, setSelectedMaterial] = useState('');
     const formRef = useRef({});
-
     const [discountPercentage, setDiscountPercentage] = useState(order?.discountPercentage || 0);
-
 
     useEffect(() => {
         const client = clients.find(c => c.id === selectedClientId);
@@ -644,7 +649,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         }, {});
 
         setAvailableServices(grouped);
-
         if (!order) { setSelectedServices([]); }
     }, [selectedClientId, clients, priceTables, services, order]);
 
@@ -659,7 +663,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             return sum + commission;
         }, 0);
         setCommissionValue(totalCommission);
-
     }, [selectedServices, assignedEmployees, discountPercentage]);
 
     const handleAddEmployee = () => {
@@ -667,24 +670,16 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             alert("Selecione um funcionário e defina a comissão.");
             return;
         }
-
         const employee = employees.find(e => e.id === employeeToAdd);
         if (!employee) return;
-
         if (assignedEmployees.some(e => e.id === employee.id)) {
             alert("Este funcionário já foi adicionado.");
             return;
         }
-
         setAssignedEmployees(prev => [
             ...prev,
-            {
-                id: employee.id,
-                name: employee.name,
-                commissionPercentage: parseFloat(commissionPercentageToAdd)
-            }
+            { id: employee.id, name: employee.name, commissionPercentage: parseFloat(commissionPercentageToAdd) }
         ]);
-
         setEmployeeToAdd('');
         setCommissionPercentageToAdd('');
     };
@@ -698,7 +693,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             id: service.id, name: service.name, price: service.displayPrice,
             toothNumber: '', color: '', quantity: 1
         };
-
         setSelectedServices(prev =>
             prev.some(s => s.id === service.id)
                 ? prev.filter(s => s.id !== service.id)
@@ -725,15 +719,12 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         if (!userId) return;
 
         const client = clients.find(c => c.id === selectedClientId);
-
         if (!client || assignedEmployees.length === 0) {
             alert('Cliente e ao menos um Funcionário são obrigatórios.');
             return;
         }
 
-        const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
         const finalServices = selectedServices.map(s => ({ ...s, quantity: Number(s.quantity) || 1, }));
-        
         const subtotal = finalServices.reduce((sum, s) => sum + ((s.price || 0) * (s.quantity || 1)), 0);
         const finalDiscountPercentage = parseFloat(discountPercentage) || 0;
         const discountAmount = (subtotal * finalDiscountPercentage) / 100;
@@ -745,23 +736,23 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         });
 
         const totalCommissionValue = finalAssignedEmployees.reduce((sum, emp) => sum + emp.commissionValue, 0);
-        
         const status = formRef.current.status.value;
         let completionDateValue = formRef.current.completionDate.value || null;
 
         if (status === 'Concluído' && !completionDateValue) {
             completionDateValue = new Date().toISOString().split('T')[0];
         }
-        if (status !== 'Concluído') {
-            completionDateValue = null;
-        }
 
         const orderData = {
-            clientId: client.id, clientName: client.name, client: client,
+            number: nextOrderNumber, // MODIFICAÇÃO: Usa o número calculado no useMemo
+            clientId: client.id, 
+            clientName: client.name, 
+            client: client,
             patientName: formRef.current.patientName.value,
             employeeName: finalAssignedEmployees.map(e => e.name).join(', '),
             assignedEmployees: finalAssignedEmployees,
-            openDate: formRef.current.openDate.value, deliveryDate: formRef.current.deliveryDate.value,
+            openDate: formRef.current.openDate.value, 
+            deliveryDate: formRef.current.deliveryDate.value,
             completionDate: completionDateValue,
             status: status,
             services: finalServices,
@@ -779,7 +770,6 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             const batch = writeBatch(db);
             const ordersCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/serviceOrders`);
             const transactionRef = collection(db, `artifacts/${appId}/users/${userId}/clientTransactions`);
-            const transactionDescription = `Referente à O.S. - Paciente: ${orderData.patientName}`;
 
             if (order) {
                 const orderRef = doc(db, ordersCollectionRef.path, order.id);
@@ -792,35 +782,24 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                         amount: finalTotalValue,
                         description: `Referente à O.S. #${order.number} - Paciente: ${orderData.patientName}`
                     });
-                } else {
-                     const newTransactionRef = doc(transactionRef);
-                     batch.set(newTransactionRef, {
-                        clientId: orderData.clientId, clientName: orderData.clientName,
-                        type: 'debit', amount: finalTotalValue, date: orderData.openDate,
-                        description: `Referente à O.S. #${order.number} - Paciente: ${orderData.patientName}`,
-                        orderId: order.id, createdAt: serverTimestamp()
-                    });
                 }
             } else {
                 const newOrderRef = doc(ordersCollectionRef);
-                const newOrderNumber = lastOrderNumber + 1;
-                orderData.number = newOrderNumber;
                 orderData.createdAt = serverTimestamp();
                 batch.set(newOrderRef, orderData);
                 const newTransactionRef = doc(transactionRef);
                 batch.set(newTransactionRef, {
                     clientId: orderData.clientId, clientName: orderData.clientName,
                     type: 'debit', amount: finalTotalValue, date: orderData.openDate,
-                    description: `Referente à O.S. #${newOrderNumber} - Paciente: ${orderData.patientName}`,
+                    description: `Referente à O.S. #${nextOrderNumber} - Paciente: ${orderData.patientName}`,
                     orderId: newOrderRef.id, createdAt: serverTimestamp()
                 });
             }
             
             await batch.commit();
             onClose();
-
         } catch (error) { 
-            console.error("Error saving service order and transaction: ", error); 
+            console.error("Error saving service order: ", error); 
             alert("Ocorreu um erro ao salvar a Ordem de Serviço.");
         }
     };
@@ -828,6 +807,21 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     return (
         <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
             <form onSubmit={handleSubmit} className="space-y-6">
+                
+                {/* MODIFICAÇÃO: Bloco Visual do Número da O.S. */}
+                <div className="bg-neutral-800 p-4 rounded-xl border border-yellow-500/30 flex items-center justify-between shadow-inner">
+                    <div>
+                        <p className="text-neutral-500 text-xs uppercase font-bold tracking-widest">Identificação da O.S.</p>
+                        <h2 className="text-3xl font-black text-yellow-500">#{nextOrderNumber}</h2>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-neutral-500 text-xs uppercase font-bold tracking-widest">Status do Registro</p>
+                        <span className={`text-sm font-semibold ${order ? 'text-blue-400' : 'text-green-400'}`}>
+                            {order ? 'Modo de Edição' : 'Novo Lançamento'}
+                        </span>
+                    </div>
+                </div>
+
                 {/* DADOS GERAIS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                     <div>
@@ -841,6 +835,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate || new Date().toISOString().split('T')[0]} required />
                     <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required />
                 </div>
+
                 {/* FUNCIONÁRIOS */}
                 <div className="p-4 border border-neutral-700 rounded-lg bg-neutral-800">
                     <h3 className="text-lg font-medium text-white mb-3">Funcionários Responsáveis</h3>
@@ -867,14 +862,13 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                                 </div>
                             </div>
                         ))}
-                        {assignedEmployees.length === 0 && <p className="text-xs text-center text-neutral-500 py-2">Nenhum funcionário adicionado.</p>}
                     </div>
                 </div>
+
                 {/* SERVIÇOS */}
                 <div className="grid grid-cols-2 gap-6">
                     <div>
                         <h3 className="text-lg font-medium text-white mb-2">Serviços Disponíveis</h3>
-                        {clients.find(c => c.id === selectedClientId)?.priceTableId && <p className="text-sm text-yellow-500 mb-2">A aplicar preços da tabela: <strong>{priceTables.find(pt => pt.id === clients.find(c => c.id === selectedClientId)?.priceTableId)?.name}</strong></p>}
                         <div className="space-y-3">
                             <select value={selectedMaterial} onChange={e => setSelectedMaterial(e.target.value)} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500">
                                 <option value="">Selecione um material...</option>
@@ -883,10 +877,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                             {selectedMaterial && (
                                 <div className="max-h-48 overflow-y-auto p-2 bg-neutral-800 border border-neutral-700 rounded-lg space-y-1">
                                     {availableServices[selectedMaterial]?.map(service => (
-                                        <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-neutral-700 cursor-pointer transition-colors">
-                                            <input type="checkbox" checked={selectedServices.some(s => s.id === service.id)} onChange={() => handleServiceToggle(service)} className="h-4 w-4 rounded border-neutral-500 bg-neutral-700 text-yellow-500 focus:ring-yellow-500" />
+                                        <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-neutral-700 cursor-pointer">
+                                            <input type="checkbox" checked={selectedServices.some(s => s.id === service.id)} onChange={() => handleServiceToggle(service)} className="h-4 w-4 rounded border-neutral-500 bg-neutral-700 text-yellow-500" />
                                             <span className="flex-1 text-sm text-neutral-300">{service.name}</span>
-                                            <span className={`text-sm font-semibold ${service.displayPrice !== service.price ? 'text-yellow-500' : 'text-neutral-400'}`}>R$ {service.displayPrice?.toFixed(2)}</span>
+                                            <span className="text-sm font-semibold text-neutral-400">R$ {service.displayPrice?.toFixed(2)}</span>
                                         </label>
                                     ))}
                                 </div>
@@ -896,83 +890,54 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     <div>
                         <h3 className="text-lg font-medium text-white mb-2">Serviços Selecionados</h3>
                         <div className="max-h-60 overflow-y-auto p-1 bg-neutral-900 border border-neutral-700 rounded-lg">
-                            {selectedServices.length > 0 ? (
-                                selectedServices.map((service, index) => (
-                                    <div key={service.id} className="p-2 rounded-md hover:bg-neutral-800 border-b border-neutral-800 last:border-b-0">
-                                        <div className="flex justify-between items-center">
-                                            <span className="font-medium text-sm text-white truncate pr-2">{service.name}</span>
-                                            <div className="flex items-center gap-2 flex-shrink-0">
-                                                <button type="button" onClick={() => setEditingService({ index, data: service })} className="p-1 text-blue-400 hover:text-blue-300" title="Editar serviço">
-                                                    <LucideEdit size={16} />
-                                                </button>
-                                                <button type="button" onClick={() => handleServiceToggle(service)} className="p-1 text-red-500 hover:text-red-400" title="Remover serviço">
-                                                    <LucideTrash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-neutral-400">
-                                            <span className="flex items-center gap-1 min-w-0"><strong>D:</strong><span className="truncate">{service.toothNumber || '-'}</span></span>
-                                            <span className="flex items-center gap-1"><strong>C:</strong><span>{service.color || '-'}</span></span>
-                                            <span className="flex items-center gap-1"><strong>Q:</strong><span>{service.quantity || '1'}</span></span>
-                                            <span className="font-semibold text-white ml-auto">R$ {((service.price || 0) * (Number(service.quantity) || 1)).toFixed(2)}</span>
+                            {selectedServices.map((service, index) => (
+                                <div key={service.id} className="p-2 rounded-md border-b border-neutral-800 last:border-b-0">
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-medium text-sm text-white">{service.name}</span>
+                                        <div className="flex items-center gap-2">
+                                            <button type="button" onClick={() => setEditingService({ index, data: service })} className="text-blue-400"><LucideEdit size={16} /></button>
+                                            <button type="button" onClick={() => handleServiceToggle(service)} className="text-red-500"><LucideTrash2 size={16} /></button>
                                         </div>
                                     </div>
-                                ))
-                            ) : (
-                                <p className="text-xs text-center text-neutral-500 py-4">Nenhum serviço selecionado.</p>
-                            )}
+                                    <div className="flex gap-x-4 mt-1 text-xs text-neutral-400">
+                                        <span>Dente: {service.toothNumber || '-'}</span>
+                                        <span>Cor: {service.color || '-'}</span>
+                                        <span>Qtd: {service.quantity}</span>
+                                        <span className="font-semibold text-white ml-auto">R$ {(service.price * service.quantity).toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        {editingService && (
-                            <div className="mt-2 p-4 bg-neutral-800 border-t-2 border-yellow-500 rounded-lg">
-                                <h4 className="text-md font-bold text-yellow-500 mb-3">Editando: {editingService.data.name}</h4>
-                                <div className="grid grid-cols-3 gap-3 items-end">
-                                    <Input label="Nº Dente" value={editingService.data.toothNumber} onChange={e => handleEditChange('toothNumber', e.target.value)} />
-                                    <Input label="Cor" value={editingService.data.color} onChange={e => handleEditChange('color', e.target.value)} />
-                                    <Input label="Qtd" type="number" min="1" value={editingService.data.quantity} onChange={e => handleEditChange('quantity', e.target.value)} />
-                                </div>
-                                <div className="flex justify-end gap-2 mt-3">
-                                    <Button onClick={() => setEditingService(null)} variant="secondary" className="py-1 px-2 text-xs">Cancelar</Button>
-                                    <Button onClick={handleUpdateService} variant="primary" className="py-1 px-2 text-xs">Atualizar Serviço</Button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                {editingService && (
+                    <div className="p-4 bg-neutral-800 border-t-2 border-yellow-500 rounded-lg">
+                        <h4 className="text-sm font-bold text-yellow-500 mb-3">Editando: {editingService.data.name}</h4>
+                        <div className="grid grid-cols-3 gap-3">
+                            <Input label="Nº Dente" value={editingService.data.toothNumber} onChange={e => handleEditChange('toothNumber', e.target.value)} />
+                            <Input label="Cor" value={editingService.data.color} onChange={e => handleEditChange('color', e.target.value)} />
+                            <Input label="Qtd" type="number" value={editingService.data.quantity} onChange={e => handleEditChange('quantity', e.target.value)} />
+                        </div>
+                        <Button onClick={handleUpdateService} variant="primary" className="mt-3 w-full py-1">Atualizar Item</Button>
+                    </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label htmlFor="status" className="block text-sm font-medium text-neutral-300 mb-1">Status</label>
-                        <select id="status" ref={el => formRef.current.status = el} defaultValue={order?.status || 'Pendente'} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500" required>
+                        <label className="block text-sm font-medium text-neutral-300 mb-1">Status</label>
+                        <select ref={el => formRef.current.status = el} defaultValue={order?.status || 'Pendente'} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg text-white">
                             <option>Pendente</option><option>Em Andamento</option><option>Concluído</option><option>Cancelado</option>
                         </select>
                     </div>
-                    <Input label="Data de Conclusão" id="completionDate" type="date" ref={el => formRef.current.completionDate = el} defaultValue={order?.completionDate} />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-2">
-                    <Input 
-                        label="Desconto (%)" 
-                        id="discountPercentage" 
-                        type="number"
-                        value={discountPercentage}
-                        onChange={e => setDiscountPercentage(e.target.value)}
-                        placeholder="Ex: 5"
-                        min="0"
-                        step="0.1"
-                    />
+                    <Input label="Data de Conclusão" type="date" ref={el => formRef.current.completionDate = el} defaultValue={order?.completionDate} />
                 </div>
 
-                <div>
-                    <label htmlFor="observations" className="block text-sm font-medium text-neutral-300 mb-1">Observações</label>
-                    <textarea id="observations" ref={el => formRef.current.observations = el} defaultValue={order?.observations} rows="3" className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500"></textarea>
-                </div>
-                
                 <div className="bg-neutral-800 p-4 rounded-lg text-right">
-                    <p className="text-sm text-neutral-400">Subtotal: <span className="font-semibold">R$ {selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0).toFixed(2)}</span></p>
-                    <p className="text-sm text-red-400">Desconto ({discountPercentage || 0}%): <span className="font-semibold">- R$ {((selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0) * (parseFloat(discountPercentage) || 0)) / 100).toFixed(2)}</span></p>
-                    <hr className="border-neutral-600 my-2" />
-                    <p className="text-sm text-neutral-400">Comissão Total: <span className="font-semibold">R$ {commissionValue.toFixed(2)}</span></p>
+                    <p className="text-sm text-neutral-400">Subtotal: R$ {selectedServices.reduce((sum, s) => sum + (s.price * s.quantity), 0).toFixed(2)}</p>
                     <p className="text-xl font-bold text-yellow-500">Total O.S.: R$ {totalValue.toFixed(2)}</p>
                 </div>
+
                 <div className="flex justify-end gap-3 pt-4">
                     <Button type="button" onClick={onClose} variant="secondary">Cancelar</Button>
                     <Button type="submit" variant="primary">Salvar Ordem de Serviço</Button>
