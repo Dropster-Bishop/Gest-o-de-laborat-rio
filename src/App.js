@@ -594,9 +594,9 @@ const AccountsPayable = () => {
 };
 
 const OrderFormModal = ({ onClose, order, userId, services, clients, employees, orders, priceTables }) => {
-    // --- MODIFICAÇÃO: Cálculo do número da O.S. antes de salvar ---
+    // --- CÁLCULO DO NÚMERO DA O.S. ---
     const nextOrderNumber = useMemo(() => {
-        if (order && order.number) return order.number; // Se for edição, mantém o número original
+        if (order && order.number) return order.number;
         const lastOrderNumber = orders.reduce((max, o) => Math.max(max, o.number || 0), 0);
         return lastOrderNumber + 1;
     }, [order, orders]);
@@ -623,8 +623,10 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
     const [commissionPercentageToAdd, setCommissionPercentageToAdd] = useState('');
     const [selectedMaterial, setSelectedMaterial] = useState('');
     const formRef = useRef({});
+
     const [discountPercentage, setDiscountPercentage] = useState(order?.discountPercentage || 0);
 
+    // Carregamento de serviços e preços baseados no cliente/tabela
     useEffect(() => {
         const client = clients.find(c => c.id === selectedClientId);
         const priceTableId = client?.priceTableId;
@@ -652,6 +654,7 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         if (!order) { setSelectedServices([]); }
     }, [selectedClientId, clients, priceTables, services, order]);
 
+    // Cálculos Financeiros
     useEffect(() => {
         const subtotal = selectedServices.reduce((sum, s) => sum + ((s.price || 0) * (Number(s.quantity) || 1)), 0);
         const discountValue = (subtotal * (parseFloat(discountPercentage) || 0)) / 100;
@@ -744,15 +747,12 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         }
 
         const orderData = {
-            number: nextOrderNumber, // MODIFICAÇÃO: Usa o número calculado no useMemo
-            clientId: client.id, 
-            clientName: client.name, 
-            client: client,
+            number: nextOrderNumber,
+            clientId: client.id, clientName: client.name, client: client,
             patientName: formRef.current.patientName.value,
             employeeName: finalAssignedEmployees.map(e => e.name).join(', '),
             assignedEmployees: finalAssignedEmployees,
-            openDate: formRef.current.openDate.value, 
-            deliveryDate: formRef.current.deliveryDate.value,
+            openDate: formRef.current.openDate.value, deliveryDate: formRef.current.deliveryDate.value,
             completionDate: completionDateValue,
             status: status,
             services: finalServices,
@@ -799,8 +799,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
             await batch.commit();
             onClose();
         } catch (error) { 
-            console.error("Error saving service order: ", error); 
-            alert("Ocorreu um erro ao salvar a Ordem de Serviço.");
+            console.error("Erro ao salvar:", error); 
+            alert("Ocorreu um erro ao salvar.");
         }
     };
 
@@ -808,8 +808,8 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
         <Modal onClose={onClose} title={order ? `Editar O.S. #${order.number}` : 'Nova Ordem de Serviço'} size="5xl">
             <form onSubmit={handleSubmit} className="space-y-6">
                 
-                {/* MODIFICAÇÃO: Bloco Visual do Número da O.S. */}
-                <div className="bg-neutral-800 p-4 rounded-xl border border-yellow-500/30 flex items-center justify-between shadow-inner">
+                {/* CABEÇALHO COM NÚMERO DA O.S. */}
+                <div className="bg-neutral-800 p-4 rounded-xl border border-yellow-500/30 flex items-center justify-between">
                     <div>
                         <p className="text-neutral-500 text-xs uppercase font-bold tracking-widest">Identificação da O.S.</p>
                         <h2 className="text-3xl font-black text-yellow-500">#{nextOrderNumber}</h2>
@@ -825,85 +825,72 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                 {/* DADOS GERAIS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                     <div>
-                        <label htmlFor="clientId" className="block text-sm font-medium text-neutral-300 mb-1">Cliente (Dentista/Clínica)</label>
-                        <select id="clientId" value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500" required>
-                            <option value="">Selecione um cliente</option>
+                        <label className="block text-sm font-medium text-neutral-300 mb-1">Cliente</label>
+                        <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg text-white" required>
+                            <option value="">Selecione...</option>
                             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                     </div>
-                    <Input label="Nome do Paciente" id="patientName" type="text" ref={el => formRef.current.patientName = el} defaultValue={order?.patientName} required />
-                    <Input label="Data de Abertura" id="openDate" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate || new Date().toISOString().split('T')[0]} required />
-                    <Input label="Data Prev. Entrega" id="deliveryDate" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required />
+                    <Input label="Nome do Paciente" type="text" ref={el => formRef.current.patientName = el} defaultValue={order?.patientName} required />
+                    <Input label="Data de Abertura" type="date" ref={el => formRef.current.openDate = el} defaultValue={order?.openDate || new Date().toISOString().split('T')[0]} required />
+                    <Input label="Data Prev. Entrega" type="date" ref={el => formRef.current.deliveryDate = el} defaultValue={order?.deliveryDate} required />
                 </div>
 
                 {/* FUNCIONÁRIOS */}
                 <div className="p-4 border border-neutral-700 rounded-lg bg-neutral-800">
-                    <h3 className="text-lg font-medium text-white mb-3">Funcionários Responsáveis</h3>
+                    <h3 className="text-lg font-medium text-white mb-3">Responsáveis</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end mb-3">
-                        <div className="md:col-span-1">
-                            <label className="block text-sm font-medium text-neutral-300 mb-1">Funcionário</label>
-                            <select value={employeeToAdd} onChange={e => setEmployeeToAdd(e.target.value)} className="w-full px-4 py-2 bg-neutral-900 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500">
-                                <option value="">Selecione...</option>
-                                {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                            </select>
-                        </div>
-                        <Input label="Comissão (%)" type="number" value={commissionPercentageToAdd} onChange={e => setCommissionPercentageToAdd(e.target.value)} placeholder="Ex: 20" />
-                        <Button onClick={handleAddEmployee} variant="secondary" className="h-11">Adicionar Funcionário</Button>
+                        <select value={employeeToAdd} onChange={e => setEmployeeToAdd(e.target.value)} className="w-full px-4 py-2 bg-neutral-900 border border-neutral-600 rounded-lg text-white">
+                            <option value="">Selecione...</option>
+                            {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                        </select>
+                        <Input label="Comissão (%)" type="number" value={commissionPercentageToAdd} onChange={e => setCommissionPercentageToAdd(e.target.value)} />
+                        <Button onClick={handleAddEmployee} variant="secondary">Adicionar</Button>
                     </div>
                     <div className="space-y-2">
                         {assignedEmployees.map(emp => (
-                            <div key={emp.id} className="flex justify-between items-center bg-neutral-900 p-2 rounded-md border border-neutral-700">
-                                <span>{emp.name}</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-yellow-500">{emp.commissionPercentage}%</span>
-                                    <button type="button" onClick={() => handleRemoveEmployee(emp.id)} className="p-1 text-red-500 hover:text-red-400" title="Remover funcionário">
-                                        <LucideTrash2 size={16} />
-                                    </button>
-                                </div>
+                            <div key={emp.id} className="flex justify-between items-center bg-neutral-900 p-2 rounded border border-neutral-700">
+                                <span className="text-sm">{emp.name} ({emp.commissionPercentage}%)</span>
+                                <button type="button" onClick={() => handleRemoveEmployee(emp.id)} className="text-red-500 hover:text-red-400"><LucideTrash2 size={16} /></button>
                             </div>
                         ))}
                     </div>
                 </div>
 
                 {/* SERVIÇOS */}
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div>
-                        <h3 className="text-lg font-medium text-white mb-2">Serviços Disponíveis</h3>
-                        <div className="space-y-3">
-                            <select value={selectedMaterial} onChange={e => setSelectedMaterial(e.target.value)} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-yellow-500">
-                                <option value="">Selecione um material...</option>
-                                {Object.keys(availableServices).sort().map(material => (<option key={material} value={material}>{material}</option>))}
-                            </select>
-                            {selectedMaterial && (
-                                <div className="max-h-48 overflow-y-auto p-2 bg-neutral-800 border border-neutral-700 rounded-lg space-y-1">
-                                    {availableServices[selectedMaterial]?.map(service => (
-                                        <label key={service.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-neutral-700 cursor-pointer">
-                                            <input type="checkbox" checked={selectedServices.some(s => s.id === service.id)} onChange={() => handleServiceToggle(service)} className="h-4 w-4 rounded border-neutral-500 bg-neutral-700 text-yellow-500" />
-                                            <span className="flex-1 text-sm text-neutral-300">{service.name}</span>
-                                            <span className="text-sm font-semibold text-neutral-400">R$ {service.displayPrice?.toFixed(2)}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            )}
+                        <h3 className="text-lg font-medium text-white mb-2">Serviços</h3>
+                        <select value={selectedMaterial} onChange={e => setSelectedMaterial(e.target.value)} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg mb-2 text-white">
+                            <option value="">Filtrar Material...</option>
+                            {Object.keys(availableServices).map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                        <div className="max-h-48 overflow-y-auto p-2 bg-neutral-800 border border-neutral-700 rounded-lg">
+                            {selectedMaterial && availableServices[selectedMaterial]?.map(service => (
+                                <label key={service.id} className="flex items-center gap-3 p-2 hover:bg-neutral-700 cursor-pointer rounded">
+                                    <input type="checkbox" checked={selectedServices.some(s => s.id === service.id)} onChange={() => handleServiceToggle(service)} className="rounded text-yellow-500" />
+                                    <span className="flex-1 text-sm text-neutral-300">{service.name} (R$ {service.displayPrice?.toFixed(2)})</span>
+                                </label>
+                            ))}
                         </div>
                     </div>
                     <div>
-                        <h3 className="text-lg font-medium text-white mb-2">Serviços Selecionados</h3>
+                        <h3 className="text-lg font-medium text-white mb-2">Selecionados</h3>
                         <div className="max-h-60 overflow-y-auto p-1 bg-neutral-900 border border-neutral-700 rounded-lg">
                             {selectedServices.map((service, index) => (
-                                <div key={service.id} className="p-2 rounded-md border-b border-neutral-800 last:border-b-0">
+                                <div key={service.id} className="p-2 border-b border-neutral-800 last:border-b-0">
                                     <div className="flex justify-between items-center">
-                                        <span className="font-medium text-sm text-white">{service.name}</span>
-                                        <div className="flex items-center gap-2">
+                                        <span className="text-sm font-bold text-white">{service.name}</span>
+                                        <div className="flex gap-2">
                                             <button type="button" onClick={() => setEditingService({ index, data: service })} className="text-blue-400"><LucideEdit size={16} /></button>
                                             <button type="button" onClick={() => handleServiceToggle(service)} className="text-red-500"><LucideTrash2 size={16} /></button>
                                         </div>
                                     </div>
-                                    <div className="flex gap-x-4 mt-1 text-xs text-neutral-400">
+                                    <div className="flex gap-4 text-xs text-neutral-400 mt-1">
                                         <span>Dente: {service.toothNumber || '-'}</span>
                                         <span>Cor: {service.color || '-'}</span>
                                         <span>Qtd: {service.quantity}</span>
-                                        <span className="font-semibold text-white ml-auto">R$ {(service.price * service.quantity).toFixed(2)}</span>
+                                        <span className="ml-auto text-white">R$ {(service.price * service.quantity).toFixed(2)}</span>
                                     </div>
                                 </div>
                             ))}
@@ -911,35 +898,38 @@ const OrderFormModal = ({ onClose, order, userId, services, clients, employees, 
                     </div>
                 </div>
 
+                {/* EDIÇÃO DE ITEM */}
                 {editingService && (
-                    <div className="p-4 bg-neutral-800 border-t-2 border-yellow-500 rounded-lg">
-                        <h4 className="text-sm font-bold text-yellow-500 mb-3">Editando: {editingService.data.name}</h4>
-                        <div className="grid grid-cols-3 gap-3">
-                            <Input label="Nº Dente" value={editingService.data.toothNumber} onChange={e => handleEditChange('toothNumber', e.target.value)} />
-                            <Input label="Cor" value={editingService.data.color} onChange={e => handleEditChange('color', e.target.value)} />
-                            <Input label="Qtd" type="number" value={editingService.data.quantity} onChange={e => handleEditChange('quantity', e.target.value)} />
-                        </div>
-                        <Button onClick={handleUpdateService} variant="primary" className="mt-3 w-full py-1">Atualizar Item</Button>
+                    <div className="p-4 bg-neutral-800 border-t-2 border-yellow-500 rounded-lg grid grid-cols-3 gap-3">
+                        <Input label="Nº Dente" value={editingService.data.toothNumber} onChange={e => handleEditChange('toothNumber', e.target.value)} />
+                        <Input label="Cor" value={editingService.data.color} onChange={e => handleEditChange('color', e.target.value)} />
+                        <Input label="Qtd" type="number" value={editingService.data.quantity} onChange={e => handleEditChange('quantity', e.target.value)} />
+                        <Button onClick={handleUpdateService} className="col-span-3">Confirmar Alteração</Button>
                     </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
+                {/* STATUS E DESCONTO */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="col-span-1">
                         <label className="block text-sm font-medium text-neutral-300 mb-1">Status</label>
                         <select ref={el => formRef.current.status = el} defaultValue={order?.status || 'Pendente'} className="w-full px-4 py-2 bg-neutral-800 border border-neutral-600 rounded-lg text-white">
                             <option>Pendente</option><option>Em Andamento</option><option>Concluído</option><option>Cancelado</option>
                         </select>
                     </div>
-                    <Input label="Data de Conclusão" type="date" ref={el => formRef.current.completionDate = el} defaultValue={order?.completionDate} />
+                    <Input label="Data Conclusão" type="date" ref={el => formRef.current.completionDate = el} defaultValue={order?.completionDate} />
+                    <Input label="Desconto (%)" type="number" value={discountPercentage} onChange={e => setDiscountPercentage(e.target.value)} />
                 </div>
 
+                <textarea ref={el => formRef.current.observations = el} defaultValue={order?.observations} placeholder="Observações..." className="w-full p-3 bg-neutral-800 border border-neutral-600 rounded-lg text-white" rows="2"></textarea>
+
+                {/* TOTAL */}
                 <div className="bg-neutral-800 p-4 rounded-lg text-right">
                     <p className="text-sm text-neutral-400">Subtotal: R$ {selectedServices.reduce((sum, s) => sum + (s.price * s.quantity), 0).toFixed(2)}</p>
-                    <p className="text-xl font-bold text-yellow-500">Total O.S.: R$ {totalValue.toFixed(2)}</p>
+                    <p className="text-2xl font-black text-yellow-500">Total: R$ {totalValue.toFixed(2)}</p>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4">
-                    <Button type="button" onClick={onClose} variant="secondary">Cancelar</Button>
+                <div className="flex justify-end gap-3">
+                    <Button onClick={onClose} variant="secondary">Cancelar</Button>
                     <Button type="submit" variant="primary">Salvar Ordem de Serviço</Button>
                 </div>
             </form>
